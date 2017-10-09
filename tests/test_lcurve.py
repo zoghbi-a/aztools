@@ -85,3 +85,21 @@ class LCurveTest(unittest.TestCase):
                 lc1.rate, np.array([0., 2., np.nan, 7]))
 
 
+    def test_read_fits_files(self):
+        import astropy.io.fits as pyfits
+        t  = np.arange(4)
+        x  = np.arange(4)
+        xe = np.arange(1, 5)*1.
+        hdu = pyfits.BinTableHDU.from_columns([
+                pyfits.Column(name='TIME', format='E', array=t),
+                pyfits.Column(name='RATE', format='E', array=x),
+                pyfits.Column(name='ERROR', format='E', array=xe),
+            ])
+        hdu.name = 'RATE'
+        fname = 'tmp.fits'
+        hdu.writeto(fname, clobber=True)
+        lc, _ = az.LCurve.read_fits_file(fname)
+        np.testing.assert_array_almost_equal(t,  lc[0])
+        np.testing.assert_array_almost_equal(x,  lc[1])
+        np.testing.assert_array_almost_equal(xe, lc[2])
+        if os.path.exists(fname): os.remove(fname)
