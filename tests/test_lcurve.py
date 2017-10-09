@@ -41,4 +41,47 @@ class LCurveTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             lc.make_even()
 
+    
+    def test_rebin_lc(self):
+        t  = np.arange(8, dtype=np.double)
+        x  = np.arange(8, dtype=np.double)
+        xe = np.arange(1, 9)*1.
+        lc = az.LCurve(t, x, xe)
+        
+        lc1 = lc.rebin(2, error='poiss')
+        np.testing.assert_array_almost_equal(
+                lc1.time, np.arange(0.5, 8, 2))
+        np.testing.assert_array_almost_equal(
+                lc1.rate, np.arange(0.5, 8, 2))
+        np.testing.assert_array_almost_equal(
+            lc1.rerr, np.sqrt(np.arange(0.5, 8, 2)*2)/2.)
+
+
+    def test_rebin_lc__w_gaps(self):
+        # t: 0  1  2  3  4  5  6  7
+        # x: 0  1  2  3  4  5  6  7
+        # xe:1  2  3  4  5  6  7  8
+        #  : *  -  *  -  -  -  -  * 
+        t  = np.arange(8, dtype=np.double)
+        x  = np.arange(8, dtype=np.double)
+        xe = np.arange(1, 9)*1.
+        ind = np.array([0, 2, 7])
+        lc = az.LCurve(t[ind], x[ind], xe[ind], 1.0)
+        
+        lc1 = lc.rebin(2, min_exp=0.5, error='poiss')
+        np.testing.assert_array_almost_equal(
+                lc1.time, np.array([0.5, 2.5, 6.5]))
+        np.testing.assert_array_almost_equal(
+                lc1.rate, np.array([0., 2., 7]))
+        np.testing.assert_array_almost_equal(
+                lc1.rerr, (np.array([0., 2., 7])*2)**0.5/2)
+
+        # when original lc is even #
+        lc = lc.make_even()
+        lc1 = lc.rebin(2, min_exp=0.0, error='poiss')
+        np.testing.assert_array_almost_equal(
+                lc1.time, np.array([0.5, 2.5, 4.5, 6.5]))
+        np.testing.assert_array_almost_equal(
+                lc1.rate, np.array([0., 2., np.nan, 7]))
+
 

@@ -37,9 +37,9 @@ class LCurve(object):
 
 
         # global variables #
-        self.time = t
-        self.rate = r
-        self.rerr = re
+        self.time = np.array(t)
+        self.rate = np.array(r)
+        self.rerr = np.array(re)
         self.fexp = fexp
         self.dt = dt
         self.iseven = iseven
@@ -80,5 +80,68 @@ class LCurve(object):
         # return a new LCurve object #
         return LCurve(t_new, r, re, self.dt, f)
 
+
+
+    def rebin(self, factor, error='poiss', min_exp=0.0):
+        """Rebin the light curve to so new_dt = dt*factor
+        
+        Parameters:
+            factor: rebinning factor. dt_new = factor * dt
+            error: error type (poiss|norm). 
+                If poiss: rerr = sqrt(rate*dt)/dt, otherwise,
+                errors are summed quadratically
+            min_exp: minimum fractional exposure to leave [0-1]
+
+        Return:
+            new binned LCurve
+
+        """
+
+        # check input error type #
+        if not error in ['poiss', 'norm']:
+            raise ValueError('error need to be poiss|norm')
+
+
+        # make lc evenly sampled, so we bin arrays easily #
+        lc = self.make_even()
+
+
+        # new sampling time and length #
+        factor = np.int(factor)
+        dt_new = lc.dt * factor
+        nt_new = lc.nt//factor
+        nt_scal = nt_new * factor
+
+
+        # pre-binning #
+        t  = lc.time[:nt_scal].reshape(nt_new, factor)
+        r  = lc.rate[:nt_scal].reshape(nt_new, factor)
+        re = lc.rerr[:nt_scal].reshape(nt_new, factor)
+        f  = lc.fexp[:nt_scal].reshape(nt_new, factor)
+
+
+        # do binning #
+        t  = t.mean(1)
+        it = np.array([~np.all(_f==0) for _f in f])
+        f  = f.mean(1)
+        f_ = np.clip(f, 1e-20, np.inf)
+        r  = np.nansum(r, 1) * 1./ (factor*f_)
+        r[~it] = np.nan
+
+        if error == 'poiss':
+            re = np.sqrt(r*dt_new)/dt_new
+        else:
+            re = np.nansum(re**2, 1)**0.5
+            re[~it] = np.nan
+
+        # leave nan values if original lc had nan (i.e it was even)
+        if self.iseven: it = np.isfinite(it)
+
+        # filter on fracexp if needed #
+        if min_exp > 0:
+            it[f < min_exp] = False
+
+        # return a new LCurve object #
+        return LCurve(t[it], r[it], re[it], dt_new, f[it])
 
 
