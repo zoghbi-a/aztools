@@ -203,6 +203,34 @@ class SimLC(object):
         return np.fft.irfft(xfft)
 
 
+    @staticmethod
+    def add_noise(x, norm=None, seed=None, dt=1.0):
+        """Add noise to lcurve x
+    
+        Parameters:
+            norm: if None, add Poisson noise, else
+                gaussian noise, with std=norm
+            dt: used with norm is None. It gives the time samling
+                of the light curve. Poisson noise is applied to
+                the counts per bin. x in this case is the count rate.
+                Counts/bin = Rate/sec * dt
+            seed: random seed
+
+        Returns:
+            array similar to x with noise added
+
+        """
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        if norm is None:
+            xn = np.random.poisson(x*dt)/dt
+        else:
+            xn = np.random.randn(len(x)) * norm + x
+        return xn
+
+
 
     @staticmethod
     def powerlaw(freq, params):
