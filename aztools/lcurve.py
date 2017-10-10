@@ -339,7 +339,7 @@ class LCurve(object):
                 rate above is assumed background subtracted.
         
         Return:
-            ...
+            freq, rpsd, nois. 
         """
 
         # check input #

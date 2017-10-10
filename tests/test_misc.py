@@ -85,3 +85,60 @@ class miscTest(unittest.TestCase):
             np.testing.assert_array_almost_equal(s[i], b[i])
 
 
+    def test_group_array_1(self):
+        # [0,1,2,3,4,5,6,7,8]
+
+        x = np.arange(9)
+        ig = az.misc.group_array(x, by_n=[1, 1])
+        g = [[i] for i in x]
+        for i in range(len(ig)):
+            np.testing.assert_array_almost_equal(ig[i], g[i])
+
+        ig = az.misc.group_array(x, by_n=[4, 1])
+        g = [[0,1,2,3], [4,5,6,7], [8]]
+        for i in range(len(ig)):
+            np.testing.assert_array_almost_equal(ig[i], g[i])
+
+        ig = az.misc.group_array(x, by_n=[3, 2])
+        g = [[0,1,2], [3,4,5,6,7,8]]
+        for i in range(len(ig)):
+            np.testing.assert_array_almost_equal(ig[i], g[i])
+
+
+
+    def test_group_array_2(self):
+        # [0,0,2,3,4,4,6,7,8]
+
+        x = np.arange(9)
+        x[1] = 0; x[5] = 4
+        ig = az.misc.group_array(x, by_n=[1, 1])
+        g = [[0,1],[2],[3],[4,5],[6],[7],[8]]
+        for i in range(len(ig)):
+            np.testing.assert_array_almost_equal(ig[i], g[i])
+
+        ig = az.misc.group_array(x, by_n=[4, 1])
+        g = [[0,1,2,3], [4,5,6,7], [8]]
+        for i in range(len(ig)):
+            np.testing.assert_array_almost_equal(ig[i], g[i])
+
+        # [0,0,0,0,4,4,6,7,8]
+        x[2] = 0; x[3] = 0
+        ig = az.misc.group_array(x, by_n=[2, 1.5])
+        g = [[0,1,2,3],[4,5,6], [7,8]]
+        for i in range(len(ig)):
+            np.testing.assert_array_almost_equal(ig[i], g[i])
+
+
+    def test_group_array_3(self):
+        # [0,0,2,3,4,4,6,7,8]; bins
+
+        x = np.arange(9)
+        x[1] = 0; x[5] = 4
+        ig = az.misc.group_array(x, bins=[0, 4, 8])
+        g = [range(4), [4,5,6,7]]
+        for i in range(len(ig)):
+            np.testing.assert_array_almost_equal(ig[i], g[i])
+
+
+
+
