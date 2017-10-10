@@ -9,7 +9,7 @@ import aztools as az
 
 
 class LCurveTest(unittest.TestCase):
-    """testing SimLC."""
+    """testing LCurve."""
 
 
     def test_LCurve_init(self):
