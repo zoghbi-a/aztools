@@ -123,4 +123,69 @@ class LCurveTest(unittest.TestCase):
             np.sort(np.concatenate([np.fft.rfftfreq(3, 1.0)[1:-1]*2])))
 
 
+    def test_bin_psd__sim(self):
+        """Do simple lc simulations and calculated psd
+        
+        Mostly to test the logavg option. The testing is done
+            to compare the errors.
+            1- Whenever logavg=True is used, bias correciton needs
+            to be applied.
+
+            2- This simulations are very sensitive to red noise leak.
+            This is clear from the dependence of the required 'bias'
+            on the driving psd slope when using a singel powerlaw model.
+            If we control for rednoise leak by using a broken powerlaw
+            as a driving psd, things are better.
+
+            3- Leak aside, logavg=True (with bias correction) does better 
+            particulalry when using a single long segment, and averaging 
+            multiple neighboring frequencies.
+
+
+        Conclusion:
+            Always use logavg=True; if the psd slope is high, use
+            a tapering window to reduce read noise leak, Not sure if 
+            that works though.
+
+        To plot, comments the return line
+        P1 is for simulations with logavg=True, the P2 for logavg=False
+
+        """
+        return
+        np.random.seed(1234)
+        sim = az.SimLC()
+        norm = 'var'
+        expo = {'var':0, 'leahy':1, 'rms':2}
+        #sim.add_model('powerlaw', [1e-1, -2])
+        sim.add_model('broken_powerlaw', [1e-1, 0, -2, 1e-2])
+        n, mu = 512, 100.
+
+
+        P1, P2 = [], []
+        for i in range(200):
+            sim.simulate(4*n, 1.0, mu, norm=norm)
+            s,i  = az.misc.split_array(sim.x[:n], 0)
+            p0 = az.LCurve.calculate_psd(s, 1.0, norm)
+            p1 = az.LCurve.bin_psd(p0[0], p0[1], {'by_n':[20,1]} ,logavg=True)
+            p2 = az.LCurve.bin_psd(p0[0], p0[1], {'by_n':[20,1]} ,logavg=False)
+            P1.append(p1[:3])
+            P2.append(p2[:3])
+        P1, P2 = np.array(P1), np.array(P2)
+
+
+        fm, pm = sim.normalized_psd[0][1:-1], sim.normalized_psd[1][1:-1]
+        import pylab as plt
+        PP, pp = [P1, P2], [p1, p2]
+        for i in range(2):
+            plt.subplot(1,2,i+1); plt.loglog(fm, pm)
+            P, p = PP[i], pp[i]
+            plt.plot(p[0], P[:,1,:].mean(0), color='C2')
+            plt.plot(p[0], np.median(P[:,1,:], 0), color='C3')
+            plt.title('Log' if i==0 else 'nolog')
+            plt.plot(p[0], P[:,1,:].mean(0)+P[:,1,:].std(0), '--', color='C2')
+            plt.plot(p[0], P[:,1,:].mean(0)-P[:,1,:].std(0), '--', color='C2')
+            plt.plot(p[0], P[:,1,:].mean(0)+P[:,2,:].mean(0), '-.', color='C3')
+            plt.plot(p[0], P[:,1,:].mean(0)-P[:,2,:].mean(0), '-.', color='C3')
+        plt.show()
+
 

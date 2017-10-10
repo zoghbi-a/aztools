@@ -28,9 +28,11 @@ def split_array(arr, length, strict=False, **kwargs):
     split_at_gaps = kwargs.get('split_at_gaps', True)
     overlap = kwargs.get('overlap', 0)
 
+    if length == 0: length = len(arr)
+
 
     # make sure overlap makes sense if used #
-    if overlap is not None and overlap >= length:
+    if overlap >= length:
         raise ValueError('overlap needs to be < length')
 
 

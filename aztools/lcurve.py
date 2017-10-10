@@ -2,6 +2,8 @@
 import numpy as np
 import os
 
+from . import misc
+
 
 class LCurve(object):
     """Light curve holder class"""
@@ -393,5 +395,73 @@ class LCurve(object):
         nois = _c(nois)[isort]
 
         return freq, rpsd, nois
+
+
+    @staticmethod
+    def bin_psd(freq, rpsd, fqbin, noise=None, logavg=True):
+        """Bin power spectrum.
+
+        Parameters:
+            freq: array of frequencies
+            rpsd: array of raw powers
+            noise: array of noise.
+            logavg: do averaging in log-space, and correct for
+                bias. Otherwise it is simple averaging
+
+        Returns:
+            fq, psd, psde, desc; with desc having some useful info
+
+        """
+
+        import scipy.special as sp
+
+
+        # ensure the arrays are compatible #
+        if len(freq) != len(rpsd):
+            raise ValueError('freq and rpsd are not compatible')
+
+        if noise is None: noise = np.zeros_like(freq)
+
+        # group the freq array #
+        nfq = len(freq)
+        idx  = misc.group_array(freq, do_unique=True, **fqbin)
+        fqm  = [len(i) for i in idx]
+        fqu  = [np.unique(freq[i], return_counts=True)[1] for i in idx]
+        nuq  = [len(np.unique(freq[i])) for i in idx]
+        fqL = [freq[i].min() for i in idx] + [freq[idx[-1].max()]]
+
+
+        # do the actual binning #
+        if logavg:
+            f  = [10**np.mean(np.log10(freq[i])) for i in idx]
+            p  = [10**np.mean(np.log10(rpsd[i])) for i in idx]
+            pe = [np.log(10)*p[i]*(0.310/fqm[i])**0.5 for i in range(len(p))]
+        else:
+            f  = [np.mean(freq[i]) for i in idx]
+            p  = [np.mean(rpsd[i]) for i in idx]
+            pe = [p[i]*(1./fqm[i])**0.5 for i in range(len(p))]
+
+        # noise; alway nolog #
+        n = np.array([np.mean(noise[i]) for i in idx])
+        fq, psd, psde = np.array(f), np.array(p), np.array(pe)
+
+        # bias correction #
+        #####################################
+        # From the simulations in test_lcurve.py:
+        # 1- Whenever logavg=True is used, bias correciton needs
+        #    to be applied. Logavg=True does better, most of the
+        #    times, particularly when averaging neighboring frequencies
+        # 2- Red noise leak is important, correct it on case
+        #    by case.
+        # bias function: bias_f(2) ~ 0.253 in Papadakis93
+        # bias_f = lambda k: -sp.digamma(k/2.)/np.log(10)
+        #####################################
+        bias_f = lambda k: -sp.digamma(k/2.)/np.log(10)
+        bias = np.array([bias_f(2) for i in nuq])
+        if logavg: psd *= 10**bias
+
+        # return #    
+        desc = {'fqL': fqL, 'fqm':fqm, 'noise':n, 'bias':bias}
+        return fq, psd, psde, desc
 
 
