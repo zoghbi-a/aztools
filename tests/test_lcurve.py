@@ -103,3 +103,24 @@ class LCurveTest(unittest.TestCase):
         np.testing.assert_array_almost_equal(x,  lc[1])
         np.testing.assert_array_almost_equal(xe, lc[2])
         if os.path.exists(fname): os.remove(fname)
+
+
+
+    def test_calculate_psd(self):
+        
+        r = np.random.randn(6) + 10
+        p = az.LCurve.calculate_psd(r, 1.0, 'rms')
+
+        np.testing.assert_array_almost_equal(p[0], 
+                np.fft.rfftfreq(6, 1.0)[1:-1])
+        np.testing.assert_array_almost_equal(p[1], 
+                (2./(6.*r.mean()**2))*np.abs(np.fft.rfft(r)[1:-1])**2)
+
+
+        r = [r[:3], r[3:]]
+        p = az.LCurve.calculate_psd(r, 1.0, 'rms')
+        np.testing.assert_array_almost_equal(p[0], 
+            np.sort(np.concatenate([np.fft.rfftfreq(3, 1.0)[1:-1]*2])))
+
+
+

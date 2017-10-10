@@ -323,4 +323,75 @@ class LCurve(object):
         return LCurve(data[0], data[1], data[2], dt, data[3])  
 
 
+    @staticmethod
+    def calculate_psd(rate, dt, norm='var', **kwargs):
+        """Calculate raw psd from a list of light curves.
+        
+        Parameters:
+            rate: array or list of arrays of lcurve rates
+            dt: time bin width of the light curve
+            norm: psd normalization: var|rms|leahy
+
+        Keywords:
+            rerr: array or list of errors on rate. If not give,
+                assume, poisson noise.
+            bgd: array or list of background rates. In this case,
+                rate above is assumed background subtracted.
+        
+        Return:
+            ...
+        """
+
+        # check input #
+        if not isinstance(rate[0], (np.ndarray, list)):
+            rate = [rate]
+
+        if not norm in ['var', 'rms', 'leahy']:
+            raise ValueError('norm need to be var|rms|leahy')
+
+        # rerr and bgd; for estimating noise level #
+        rerr = kwargs.get('rerr', None)
+        bgd  = kwargs.get('bgd', 0.0)
+        if not isinstance(bgd, (np.ndarray, list)):
+            bgd = [bgd for r in rate]
+        if rerr is None:
+            rerr = [np.sqrt((r+b)/dt) for r,b in zip(rate, bgd)]
+
+
+        # fft; remove the 0-freq and the nyquist #
+        freq = [np.fft.rfftfreq(len(r), dt)[1:-1] for r in rate]
+        rfft = [np.fft.rfft(r)[1:-1] for r in rate]
+        mean = [np.mean(r) for r in rate]
+
+        # normalize psd #
+        expo = {'var':0, 'leahy':1, 'rms':2} 
+        rpsd = [(2.*dt / (len(r) * mu**expo[norm])) * np.abs(rf)**2
+                    for r,rf,mu in zip(rate, rfft, mean)]
+
+        ## ------ noise level ------- ##
+        # noise level is: 2*(mu+bgd)/(mu^2) for RMS normalization
+        # This the special case of poisson noise light curves.
+        # Generally: noise = <e^2>/(mu^2 fq_nyq)
+        # where <e^2> is the averaged squared error in the measurements
+        # which for poisson case: e = sqrt((mu+bgd)*dt)/dt = sqrt((mu+bgd)/dt)
+        # --> <e^2> = (mu+bgd)/dt
+        # fq_nyq: is the Nyquist frequency: fq_nyq = 1/(2*dt)
+        # ==> for poisson case: noise = 2*(mu+bgd)/mu^2
+        # For other normalization, we need to renormalize accordingly
+        ## -------------------------- ##
+        fnyq = 0.5/dt
+        nois = [ff*0+np.mean(re**2)/(fnyq*mu**expo[norm]) 
+                    for ff,re,mu in zip(freq, rerr, mean)]
+
+
+        # flattern lists #
+        _c = np.concatenate
+        freq = _c(freq)
+        isort = np.argsort(freq)
+        freq = freq[isort]
+        rpsd = _c(rpsd)[isort]
+        nois = _c(nois)[isort]
+
+        return freq, rpsd, nois
+
 
