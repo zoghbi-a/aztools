@@ -123,6 +123,7 @@ class LCurveTest(unittest.TestCase):
             np.sort(np.concatenate([np.fft.rfftfreq(3, 1.0)[1:-1]*2])))
 
 
+
     def test_bin_psd__sim(self):
         """Do simple lc simulations and calculated psd
         
@@ -141,6 +142,10 @@ class LCurveTest(unittest.TestCase):
             particulalry when using a single long segment, and averaging 
             multiple neighboring frequencies.
 
+            4- Tapering might work. The psd need to be renormalized to
+            componsate for the reduced variability power (hanning for example
+            reduces power by ~0.62; from ratio of rms for random while noise)
+
 
         Conclusion:
             Always use logavg=True; if the psd slope is high, use
@@ -156,8 +161,8 @@ class LCurveTest(unittest.TestCase):
         sim = az.SimLC()
         norm = 'var'
         expo = {'var':0, 'leahy':1, 'rms':2}
-        #sim.add_model('powerlaw', [1e-1, -2])
-        sim.add_model('broken_powerlaw', [1e-1, 0, -2, 1e-2])
+        sim.add_model('powerlaw', [1e-1, -2])
+        #sim.add_model('broken_powerlaw', [1e-1, 0, -2, 1e-2])
         n, mu = 512, 100.
 
 
@@ -166,8 +171,8 @@ class LCurveTest(unittest.TestCase):
             sim.simulate(4*n, 1.0, mu, norm=norm)
             s,i  = az.misc.split_array(sim.x[:n], 0)
             p0 = az.LCurve.calculate_psd(s, 1.0, norm)
-            p1 = az.LCurve.bin_psd(p0[0], p0[1], {'by_n':[20,1]} ,logavg=True)
-            p2 = az.LCurve.bin_psd(p0[0], p0[1], {'by_n':[20,1]} ,logavg=False)
+            p1 = az.LCurve.bin_psd(p0[0], p0[1], {'by_n':[10,1]} ,logavg=True)
+            p2 = az.LCurve.bin_psd(p0[0], p0[1], {'by_n':[10,1]} ,logavg=False)
             P1.append(p1[:3])
             P2.append(p2[:3])
         P1, P2 = np.array(P1), np.array(P2)
@@ -189,6 +194,7 @@ class LCurveTest(unittest.TestCase):
         plt.show()
 
 
+
     def test_calculate_lag(self):
         sim = az.SimLC()
         norm = 'rms'
@@ -205,6 +211,7 @@ class LCurveTest(unittest.TestCase):
         np.testing.assert_array_almost_equal(sim.normalized_lag[0][1:-1], p[0])
         # do the first 5 before the oscillation kicks in.  
         np.testing.assert_array_almost_equal(np.zeros(5)+6, p[1][:5])
+
 
 
     def test_calculate_lag__sim(self):
@@ -233,7 +240,7 @@ class LCurveTest(unittest.TestCase):
 
 
         """
-        # return
+        return
         np.random.seed(4567)
         sim = az.SimLC()
         norm = 'var'
