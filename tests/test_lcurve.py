@@ -189,3 +189,88 @@ class LCurveTest(unittest.TestCase):
         plt.show()
 
 
+    def test_calculate_lag(self):
+        sim = az.SimLC()
+        norm = 'rms'
+        expo = 2
+        sim.add_model('powerlaw', [1e-4, -2])
+        n, mu = 128, 100.
+
+        sim.simulate(n, 1.0, mu, norm=norm)
+        
+        sim.add_model('constant', 6, lag=True)
+        sim.apply_lag(phase=False)
+
+        p = az.LCurve.calculate_lag(sim.y, sim.x, 1.0, fqbin=None)
+        np.testing.assert_array_almost_equal(sim.normalized_lag[0][1:-1], p[0])
+        # do the first 5 before the oscillation kicks in.  
+        np.testing.assert_array_almost_equal(np.zeros(5)+6, p[1][:5])
+
+
+    def test_calculate_lag__sim(self):
+        """Do simple lc simulations and calculated lag
+
+        Note:
+            1- No poisson noise is included in the following.
+
+            2- Red noise leak can affect lag measurements too. 
+            The main effect is that when using steep powerlaw PSD, 
+            the lag is underestimated (closer to zero). The effect 
+            goes away when using a broken powerlaw PSD. This is the
+            wether binning is used or not.
+
+            3- Tapering the light curve with some function (e.g. hanning)
+            reduces the bias significantly except at the lowest frequencies.
+            where it remains. This is true wether binning is used or not.
+
+            4- The bias in the lowest frequency is reduced by averaging the
+            log of the cross spectrum rather than the cross spectrum itself.
+
+        Conclusion: Taper the light curves
+
+
+        comment the first line to run
+
+
+        """
+        # return
+        np.random.seed(4567)
+        sim = az.SimLC()
+        norm = 'var'
+        expo = {'var':0, 'leahy':1, 'rms':2}
+        sim.add_model('powerlaw', [1e-1, -2])
+        #sim.add_model('broken_powerlaw', [1e-1, 0, -2, 1e-2])
+        sim.add_model('constant', 2, lag=True)
+        #sim.add_model('lorentz', [2, 0, 2e-1], lag=True)
+        n, mu = 512, 100.
+
+        def taper(x):
+            xm = np.mean(x)
+            return (x-xm) * np.hanning(len(x)) + xm
+
+        L = []
+        for i in range(200):
+            sim.simulate(4*n, 1.0, mu, norm=norm)
+            sim.apply_lag(phase=False)
+            s,i  = az.misc.split_array(sim.y[:n], 64)
+            S,i  = az.misc.split_array(sim.x[:n], 64)
+            s = [taper(x) for x in s]
+            S = [taper(x) for x in S]
+            l = az.LCurve.calculate_lag(s, S, 1.0, {'by_n':[2,1]})
+            #l = az.LCurve.calculate_lag(s, S, 1.0)
+            L.append(l[:3])
+        L = np.array(L)
+
+
+        fm, lm = sim.normalized_lag[0][1:-1], sim.normalized_lag[1][1:-1]
+        import pylab as plt
+        fq = l[0]
+        plt.semilogx(fm, lm)
+        plt.plot(fq, np.mean(L[:,1,:], 0), 'o-', color='C2')
+        plt.plot(fq, np.median(L[:,1,:], 0), color='C3')
+        plt.plot(fq, L[:,1,:].mean(0)+L[:,1,:].std(0), '--', color='C2')
+        plt.plot(fq, L[:,1,:].mean(0)-L[:,1,:].std(0), '--', color='C2')
+        plt.plot(fq, L[:,1,:].mean(0)+L[:,2,:].mean(0), '-.', color='C3')
+        plt.plot(fq, L[:,1,:].mean(0)-L[:,2,:].mean(0), '-.', color='C3')
+        plt.show()
+

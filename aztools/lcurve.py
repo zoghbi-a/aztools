@@ -404,6 +404,8 @@ class LCurve(object):
         Parameters:
             freq: array of frequencies
             rpsd: array of raw powers
+            fqbin: binning dict to be passed to @misc.group_array
+                to bin the frequency axis
             noise: array of noise.
             logavg: do averaging in log-space, and correct for
                 bias. Otherwise it is simple averaging
@@ -426,8 +428,6 @@ class LCurve(object):
         nfq = len(freq)
         idx  = misc.group_array(freq, do_unique=True, **fqbin)
         fqm  = [len(i) for i in idx]
-        fqu  = [np.unique(freq[i], return_counts=True)[1] for i in idx]
-        nuq  = [len(np.unique(freq[i])) for i in idx]
         fqL = [freq[i].min() for i in idx] + [freq[idx[-1].max()]]
 
 
@@ -457,11 +457,157 @@ class LCurve(object):
         # bias_f = lambda k: -sp.digamma(k/2.)/np.log(10)
         #####################################
         bias_f = lambda k: -sp.digamma(k/2.)/np.log(10)
-        bias = np.array([bias_f(2) for i in nuq])
+        bias = np.zeros_like(psd) + bias_f(2)
         if logavg: psd *= 10**bias
 
         # return #    
         desc = {'fqL': fqL, 'fqm':fqm, 'noise':n, 'bias':bias}
         return fq, psd, psde, desc
+
+
+    @staticmethod
+    def calculate_lag(rate, Rate, dt, fqbin=None, **kwargs):
+        """Calculate and bin lags from two lists of light curves.
+        
+        Parameters:
+            rate: array or list of arrays of lcurve rates
+            Rate: array or list of arrays of Reference lcurve rates
+            dt: time bin width of the light curve
+            fqbin: binning dict to be passed to @misc.group_array
+                to bin the frequency axis. If None, return raw lag
+
+        Keywords:
+            rerr: array or list of errors on rate. If not give,
+                assume, poisson noise.
+            bgd: array or list of background rates. In this case,
+                rate above is assumed background subtracted.
+            Rerr: array or list of errors on Rate. If not give,
+                assume, poisson noise.
+            Bgd: array or list of background rates for the reference. 
+                In this case, Rate above is assumed background subtracted.
+            phase: return phase lag instead of time lag
+            mask_coh: mask bins with undefined coherence, setting their
+                value to 0 and error to pi
+                
+        
+        Return:
+            freq, lag, lage, desc;
+            desc = {'fqm', 'fqL', 'limit', 'Limit'}
+        """
+
+        phase = kwargs.get('phase', False)
+        mask_coh = kwargs.get('mask_coh', False)
+
+
+        # check input #
+        if not isinstance(rate[0], (np.ndarray, list)):
+            rate = [rate]
+            Rate = [Rate]
+
+        # check that lc and reference are compatible #
+        for r1,r2 in zip(rate, Rate):
+            if len(r1) != len(r2):
+                raise ValueError('rate and Rate are incompatible')
+
+
+        # rerr and bgd; for estimating noise level #
+        rerr = kwargs.get('rerr', None)
+        bgd  = kwargs.get('bgd', 0.0)
+        if not isinstance(bgd, (np.ndarray, list)):
+            bgd = [bgd for r in rate]
+        if rerr is None:
+            rerr = [np.sqrt((r+b)/dt) for r,b in zip(rate, bgd)]
+
+        # also Rerr and Bgd for the reference lc #
+        Rerr = kwargs.get('Rerr', None)
+        Bgd  = kwargs.get('Bgd', 0.0)
+        if not isinstance(Bgd, (np.ndarray, list)):
+            Bgd = [Bgd for r in Rate]
+        if Rerr is None:
+            Rerr = [np.sqrt((r+b)/dt) for r,b in zip(Rate, Bgd)]
+
+
+        # fft; remove the 0-freq and the nyquist #
+        freq = [np.fft.rfftfreq(len(r), dt)[1:-1] for r in rate]
+        rfft = [np.fft.rfft(r)[1:-1] for r in rate]
+        Rfft = [np.fft.rfft(r)[1:-1] for r in Rate]
+        crss = [R*np.conj(r) for r,R in zip(rfft, Rfft)]
+        rpsd = [np.abs(r)**2 for r in rfft]
+        Rpsd = [np.abs(r)**2 for r in Rfft]
+        
+
+
+        # noise level in psd. See comments in @calculate_psd #
+        fnyq = 0.5/dt
+        nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, rerr)]
+        Nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, Rerr)]
+
+
+        # flattern lists #
+        _c = np.concatenate
+        freq = _c(freq)
+        isort = np.argsort(freq)
+        freq = freq[isort]
+        crss = _c(crss)[isort]
+        rpsd = _c(rpsd)[isort]
+        Rpsd = _c(Rpsd)[isort]
+        nois = _c(nois)[isort]
+        Nois = _c(Nois)[isort]
+
+
+        # do we need just raw lags? #
+        if fqbin is None:
+            lag = np.angle(crss) / (1. if phase else 2*np.pi*freq)
+            return freq, lag
+
+        
+        # bin the lag #
+        _a = np.array
+        idx = misc.group_array(freq, do_unique=True, **fqbin)
+        fqm = _a([len(i) for i in idx])
+        fqL = _a([freq[i].min() for i in idx] + [freq[idx[-1].max()]])
+
+        f  = _a([np.mean(freq[i]) for i in idx])
+        p  = _a([np.mean(rpsd[i]) for i in idx])
+        P  = _a([np.mean(Rpsd[i]) for i in idx])
+        n  = _a([np.mean(nois[i]) for i in idx])
+        N  = _a([np.mean(Nois[i]) for i in idx])
+        c  = _a([np.mean(crss[ii]) for ii in idx])
+        cl = _a([np.exp(np.mean(np.log(crss[ii]))) for ii in idx])
+
+        # phase lag and its error #
+        lag = np.angle(cl)
+        n2 = ((p - n)*n + (P - N)*N + n*N) / fqm
+        g2 = (np.abs(c)**2 - n2) / (p * P)
+        dum = (1 - g2) / (2*g2*fqm)
+        lag_e = np.sqrt(np.abs(dum))
+
+        # mask out points where coherence is undefined #
+        if mask_coh:
+            idx = (dum<0) | (g2<0)
+            lag_e[dum<0] = np.pi
+            lag[dum<0] = 0.0
+
+
+        # limits on lag measurements due to poisson noise #
+        # equation 30 in Vaughan+2003 #
+        limit = np.sqrt(np.abs(n/(fqm * g2 * (p-n))))
+        Limit = np.sqrt(np.abs(N/(fqm * g2 * (P-N)))) 
+
+
+        # do we need time lag instead of phase lag? #
+        if not phase:
+            lag   /= (2*np.pi*f)
+            lag_e /= (2*np.pi*f)
+            limit /= (2*np.pi*f)
+            Limit /= (2*np.pi*f)
+
+
+        # return #
+        desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit}
+
+        return f, lag, lag_e, desc
+
+
 
 
