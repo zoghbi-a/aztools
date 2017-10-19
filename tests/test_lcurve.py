@@ -85,6 +85,91 @@ class LCurveTest(unittest.TestCase):
                 lc1.rate, np.array([0., 2., np.nan, 7]))
 
 
+    def test_interp_small_gaps_1(self):
+        # t: 0  1  2  3  4  5  6  7
+        # x: 0  1  2  3  4  5  6  7
+        # xe:1  2  3  4  5  6  7  8
+        #  : *  -  *  -  -  -  -  * 
+        t  = np.arange(8, dtype=np.double)
+        x  = np.arange(8, dtype=np.double)
+        xe = np.arange(1, 9)*1.
+        ind = np.array([0, 2, 7])
+        lc = az.LCurve(t[ind], x[ind], xe[ind], 1.0)
+        
+        # not even #
+        with self.assertRaises(ValueError):
+            lc.interp_small_gaps(maxgap=1, noise=None)
+
+        # no noise, 1 gap #
+        lc = lc.make_even()
+        lc.interp_small_gaps(maxgap=1, noise=None)
+        np.testing.assert_array_almost_equal(lc.rate,  [0, 1, 2]+[np.nan]*4+[7])
+        np.testing.assert_array_almost_equal(lc.rerr,  [1, 0, 3]+[np.nan]*4+[8])
+
+    
+
+    def test_interp_small_gaps_2(self):
+        # t: 0  1  2  3  4  5  6  7
+        # x: 0  1  2  3  4  5  6  7
+        # xe:1  2  3  4  5  6  7  8
+        #  : *  -  *  -  -  -  -  * 
+        t  = np.arange(8, dtype=np.double)
+        x  = np.arange(8, dtype=np.double)
+        xe = np.arange(1, 9)*1.
+        ind = np.array([0, 2, 7])
+        lc = az.LCurve(t[ind], x[ind], xe[ind], 1.0)
+        lc = lc.make_even()
+
+        # no noise, all gaps #
+        lc.interp_small_gaps(maxgap=20, noise=None)
+        np.testing.assert_array_almost_equal(lc.rate,  [0, 1, 2, 3, 4, 5, 6, 7])
+
+
+
+    def test_interp_small_gaps_3(self):
+        # t: 0  1  2  3  4  5  6  7
+        # x: 0  1  2  3  4  5  6  7
+        # xe:1  2  3  4  5  6  7  8
+        #  : *  -  *  -  -  -  -  * 
+        t  = np.arange(8, dtype=np.double)
+        x  = np.arange(8, dtype=np.double)
+        xe = np.arange(1, 9)*1.
+        ind = np.array([0, 2, 7])
+        lc = az.LCurve(t[ind], x[ind], xe[ind], 1.0)
+        lc = lc.make_even()
+
+
+        # poisson #
+        lc.interp_small_gaps(maxgap=1, noise='poiss', seed=123)
+        np.random.seed(123)
+        pp = np.random.poisson(1)
+        np.testing.assert_array_almost_equal(lc.rate,  [0, pp, 2]+[np.nan]*4+[7])
+        np.testing.assert_array_almost_equal(lc.rerr,  [1, pp**0.5, 3]+[np.nan]*4+[8])
+
+
+
+    def test_interp_small_gaps_4(self):
+        # t: 0  1  2  3  4  5  6  7
+        # x: 0  1  2  3  4  5  6  7
+        # xe:1  2  3  4  5  6  7  8
+        #  : *  -  *  -  -  -  *  - 
+        # gap at the end of lc #
+        t  = np.arange(8, dtype=np.double)
+        x  = np.arange(8, dtype=np.double)
+        xe = np.arange(1, 9)*1.
+        ind = np.array([0, 2, 6, 7])
+        lc = az.LCurve(t[ind], x[ind], xe[ind], 1.0)
+        lc.rate[-1] = np.nan
+        lc.rerr[-1] = np.nan
+        lc = lc.make_even()
+
+
+        lc.interp_small_gaps(maxgap=1, noise=None)
+        np.testing.assert_array_almost_equal(lc.rate,  [0, 1, 2]+[np.nan]*3+[6,6])
+        np.testing.assert_array_almost_equal(lc.rerr,  [1, 0, 3]+[np.nan]*3+[7,0])
+
+
+
     def test_read_fits_files(self):
         import astropy.io.fits as pyfits
         t  = np.arange(4)

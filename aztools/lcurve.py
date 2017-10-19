@@ -154,6 +154,59 @@ class LCurve(object):
 
 
 
+    def interp_small_gaps(self, maxgap=None, noise='poiss', seed=None):
+        """Interpolate small gaps in the lightcurve if the gap
+            is <maxgap; applying noise if requested
+
+        Parameters:
+            maxgap: the maximum length of a gap to be interpolated
+            noise: poiss|norm|None
+            seed: random seen if noise is requested
+
+        """
+        from itertools import groupby
+
+        if not self.iseven:
+            raise ValueError('lc is not even; make even first')
+
+        # random seed if noise is needed #
+        if noise is not None:
+            np.random.seed(seed)
+
+
+        # find gap lengths in the data #
+        maxn = self.nt if maxgap is None else maxgap
+        iarr = [list(i[1]) for i in groupby(np.arange(self.nt), 
+                    lambda ix:np.isfinite(self.rate[ix]))]
+        # indices of non-finite segments #
+        iinf = iarr[(1 if np.isfinite(iarr[0][0]) else 0)::2]
+        # length of each non-finite segment #
+        iinf = [i for i in iinf if len(i)<=maxn]
+        iinf = [j for i in iinf for j in i]
+        
+
+
+
+        # interpolate all values than, keep only those with length<maxn #
+        idx = np.isfinite(self.rate)
+        y  = np.interp(self.time, self.time[idx], self.rate[idx])
+        ye = np.zeros_like(y)
+        if noise == 'poiss':
+            yp = np.random.poisson(y*self.dt)
+            y  = yp / self.dt
+            ye = np.sqrt(yp) / self.dt
+        elif noise == 'norm':
+            me = np.mean(self.rerr[idx])
+            y += np.random.norm(len(y)) * ye
+            ye = np.zeros_like(y) + ye
+
+        # now update fill in the gaps with length<maxn #
+        self.rate[iinf] = y[iinf]
+        self.rerr[iinf] = ye[iinf]
+
+
+
+
     @staticmethod
     def read_fits_file(fits_file, **kwargs):
         """Read LCurve from fits file
