@@ -120,4 +120,29 @@ def group_array(arr, by_n=None, bins=None, **kwargs):
     return ind
 
 
+def write_2d_veusz(fname, arr, xcent=None, ycent=None, append=False):
+    """Write a 2d array to a file for veusz viewing
+    
+    Parameters:
+        fname: name of file to write
+        arr: array to write, shape (len(xcent), len(ycent))
+        xcent, ycent: central points of axes.
+        append: append to file? Default=False
+    """
+
+    thead = '\n\n'
+    if xcent is not None and ycent is not None:
+        assert( arr.shape==(len(xcent),len(ycent)))
+        thead += (  'xcent ' + 
+                    ' '.join(['{}'.format(x) for x in xcent]) + '\n')
+        thead += (  'ycent ' +
+                    ' '.join(['{}'.format(x) for x in ycent]) + '\n')
+    arr = arr.T
+    txt2d = '\n'.join([
+            '{}'.format(' '.join(['{:3.3e}'.format(arr[i, j])
+                        for j in range(len(arr[0]))]))
+                for i in range(len(arr))
+        ])
+    with open( fname, 'a' if append else 'w' ) as fp:
+        fp.write(thead+txt2d)
 
