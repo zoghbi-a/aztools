@@ -1,6 +1,7 @@
 
 
 import numpy as np
+import os
 
 
 def split_array(arr, length, strict=False, **kwargs):
@@ -145,4 +146,131 @@ def write_2d_veusz(fname, arr, xcent=None, ycent=None, append=False):
         ])
     with open( fname, 'a' if append else 'w' ) as fp:
         fp.write(thead+txt2d)
+
+
+def spec_2_ebins(spec_file, nbins=1, **kwargs):
+    """Find nbins energy bins from spec_file so
+        that the bins have roughly the same number of 
+        counts per bin, equal snr per bin, and are
+        eually-separated in log-space
+
+    Parameters:
+        spec_file: spectrum file. background will be
+            read from the header. If not defined, assume
+            it is 0.
+        nbins: how many bins to extract.
+
+    Keywords:
+        ebound: [emin, emax] of the limiting energies where to
+            do the calculations. e.g. [3., 79] for nustar
+        efile: name of output file. Default energy.dat
+            --> {file}, {file}.snr, {file}.log
+
+
+    Write results to {efile}, {efile}.snr, {feile}.log
+
+    """
+    import astropy.io.fits as pyfits
+
+    ebound = kwargs.get('ebound', [2., 10.])
+    efile = kwargs.get('efile', 'energy.dat')
+
+
+    # do we have a file? #
+    if not os.path.exists(spec_file):
+        raise ValueError('Cannot find file {}'.format(spec_file))
+
+    
+    # try reading the background file #
+    with pyfits.open(spec_file) as fp:
+        try:
+            basedir = '/'.join(spec_file.split('/')[:-1]) or '.'
+            bgd_file = '{}/{}'.format(basedir, fp[1].header['BACKFILE'])
+            print('Background File {} ...'.format(bgd_file))
+        except KeyError:
+            bgd_file = None
+            print('There is no background file. Assuming 0.')
+
+    # try reading the response file #
+    with pyfits.open(spec_file) as fp:
+        try:
+            basedir = '/'.join(spec_file.split('/')[:-1]) or '.'
+            rsp_file = '{}/{}'.format(basedir, fp[1].header['RESPFILE'])
+            print('Response File {} ...'.format(rsp_file))
+        except KeyError:
+            raise ValueError('There is no response file. Quitting ...')
+
+    # read counts #
+    with pyfits.open(spec_file) as fs:
+        cs = fs['SPECTRUM'].data['COUNTS']
+        if bgd_file is not None:
+            s_scale = fs['SPECTRUM'].header['BACKSCAL']
+    if bgd_file is not None:
+        with pyfits.open(bgd_file) as fs:
+            cb = fs['SPECTRUM'].data['COUNTS']
+            b_scale = fs['SPECTRUM'].header['BACKSCAL']
+    counts = cs if bgd_file is None else cs - cb*s_scale/b_scale
+
+
+    # Read response for en to channel conversion #    
+    with pyfits.open(rsp_file) as fp:
+        Ch = fp['EBOUNDS'].data.field(0)
+        Emin = fp['EBOUNDS'].data.field(1)
+        Emax = fp['EBOUNDS'].data.field(2)
+
+    i_useful = range(np.argmin(np.abs(Emin-ebound[0])), 
+                     np.argmin(np.abs(Emax-ebound[1])) + 1)
+    c_useful = counts[i_useful]
+
+    ############################
+    # for equal counts per bin #
+    c_per_bin = c_useful.sum()*1./nbins
+    csum = np.cumsum(c_useful)
+    cfac = np.arange(nbins+1) * c_per_bin
+    cbin = [np.argmin(np.abs(csum-c)) for c in cfac]
+    cbin = np.array(cbin) + i_useful[0]
+    with open(efile, 'w') as fp:
+        fp.write('\n'.join(['{} {}'.format(
+            cbin[i], 0.5*(Emin[cbin[i]]+Emax[cbin[i]])) 
+                for i in range(nbins+1)]))
+    print('Results written to {}'.format(efile))
+
+
+    ##############
+    # bin by snr #
+    c_sum = c_useful.sum()
+    nc = len(c_useful)
+    snr_per_bin = (c_sum/(nbins+1)) / np.sqrt(c_sum/(nbins+1))
+    sbin, snr, i1, i2 = [0], 0, 0, 0
+    ss = []
+    while i1<nc:
+        while snr <= snr_per_bin:
+            i2 += 1
+            if i2 >= nc-1: break
+            dum = c_useful[i1:i2].sum()
+            if dum < 0: continue
+            snr = dum/np.sqrt(dum)
+        sbin.append(i2)
+        i1 = i2
+        ss.append(snr)
+        snr = 0
+    sbin = np.array(sbin[:-1]) + i_useful[0]
+    with open(efile + '.snr', 'w') as fp:
+        fp.write('\n'.join(['{} {}'.format(
+            sbin[i], 0.5*(Emin[cbin[i]]+Emax[cbin[i]])) 
+            for i in range(nbins+1)]))
+    print('Results written to {}'.format(efile + '.snr'))
+
+
+    ####################
+    # bin in log space #
+    lebin = np.logspace(np.log10(ebound[0]), np.log10(ebound[1]), nbins+1)
+    # re-snap to the detector channels.
+    lbin = map(lambda en:np.argmin(np.abs(Emin-en)), lebin)
+
+    with open(efile + '.log', 'w') as fp:
+        fp.write('\n'.join(['{} {}'.format(
+            lbin[i], 0.5*(Emin[cbin[i]]+Emax[cbin[i]])) 
+            for i in range(nbins+1)]))
+    print('Results written to {}'.format(efile + '.log'))
 
