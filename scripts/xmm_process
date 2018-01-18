@@ -1,0 +1,45 @@
+#!/bin/bash
+
+mode=$1
+
+if [ -z $mode ]; then
+
+    export SAS_ODF="$PWD"
+    cifbuild withccfpath=no analysisdate=now category=XMMCCF fullpath=yes
+    export SAS_CCF="$PWD/ccf.cif"
+    odfingest odfdir=$SAS_ODF outdir=$SAS_ODF
+    exit
+fi
+
+export SAS_ODF="$PWD/../odf/"
+export SAS_CCF="$SAS_ODF/ccf.cif"
+
+case $mode in
+    "pn" )
+            #epchain exposure=2
+            epchain
+            mv *EVL* pn.fits;rm P*
+            ;;
+    "pn_timing" )
+            epchain datamode=TIMING
+            mv *EVL* pn.fits; rm P*
+            ;;
+    "mos" )
+            #emchain exposures=2
+            emchain
+            mv *M1*EVL* m1.fits; mv *M2*EVL* m2.fits;rm P*
+            ;;
+    "rgs" )
+            rgsproc orders='1 2' bkgcorrect=no withmlambdacolumn=yes 
+            ;;
+    "omf" )
+            omfchain
+            ;;
+    "omi" )  
+            omichain omdetectnsigma=5 omdetectdetectextended=no
+            ;;
+    "omg" )  
+            omgchain
+            ;;
+esac
+
