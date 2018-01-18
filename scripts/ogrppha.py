@@ -1,0 +1,210 @@
+#!/usr/bin/env python
+
+
+from astropy.io import fits as pyfits
+import numpy as np
+import os
+import argparse
+from scipy.ndimage import filters
+
+
+if __name__ == '__main__':
+    
+    p   = argparse.ArgumentParser(                                
+        description='''
+        Group pha files using optimum binning based on the instrument
+        resoluions, or using the formula in Kaastra+Bleeker 16,
+        with the addition of a signal to noise constraint.
+        The input spectrum is assumed to have the RESPFILE and 
+        BACKFILE keywords
+        ''',            
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter ) 
+
+    p.add_argument("spec_file"  , metavar="spec_file", type=str,
+            help="The name of the input spectrum file.")
+    p.add_argument("out_file"  , metavar="out_file", type=str,
+            help="The name of the output spectrum file.")
+    p.add_argument('-s', '--snr', metavar='min_snr', 
+            type=float, default=3,
+            help='The minimum signal to noise ration per bin. -1 to ignore')
+    p.add_argument('-c', '--counts', metavar='min_counts', 
+            type=float, default=-1,
+            help='The minimum counts per bin. -1 to ignore')
+    p.add_argument('-f', '--osample_fac', metavar='osample_fac', 
+            type=float, default=3,
+            help='The oversampling factor in units of the local FWHM')
+    p.add_argument("--use_formula", action='store_true', default=True,
+            help=('Calculate the oversampling factor using formula 36-37 '
+                  'in Kaastra & Bleeker 2016'))
+
+
+    # process input #
+    args        = p.parse_args()
+    spec_file   = args.spec_file
+    out_file    = args.out_file
+    min_snr     = args.snr
+    min_counts  = args.counts
+    osample_fac = args.osample_fac
+    use_formula = args.use_formula
+
+
+    # some defaults #
+    if osample_fac < 0: osample_fac = 1
+
+
+
+
+
+    # ------------------------------------------- #
+    # Read the response and background file names #
+    with pyfits.open(spec_file) as fp:
+        src_c  = np.array(fp['SPECTRUM'].data.field(1), np.double)
+        src_ex = fp['SPECTRUM'].header['EXPOSURE'] 
+        src_bs = fp['SPECTRUM'].header['BACKSCAL'] 
+        try:
+            rsp_file = fp['SPECTRUM'].header['RESPFILE']
+        except:
+            raise ValueError('No RESPFILE key in spectrum header')
+        try:
+            bgd_file = fp['SPECTRUM'].header['BACKFILE']
+        except:
+            raise ValueError('No BACKFILE key in spectrum header; Set to none if needed')
+    # ------------------------------------------- #
+
+
+
+    # --------------------- #
+    # get background counts #
+    bgd_c = np.zeros_like(src_c)
+    if not bgd_file in [None, 'none']:
+        with pyfits.open(bgd_file) as fp:
+            bgd_c  = np.array(fp['SPECTRUM'].data.field(1), np.double)
+            bgd_ex = fp['SPECTRUM'].header['EXPOSURE'] 
+            bgd_bs = fp['SPECTRUM'].header['BACKSCAL'] 
+        bgd_c *= (src_bs/bgd_bs) * (src_ex/bgd_ex)
+    # --------------------- #
+
+
+    # ------------------------- #
+    # energy-channel conversion #
+    with pyfits.open(rsp_file) as fp:
+        edata  = fp['EBOUNDS'].data
+        chan   = edata.field(0)
+        energy = (edata.field(1)+edata.field(2)) / 2.
+        try:
+            matrix = fp['MATRIX'].data
+        except:
+            matrix = fp['SPECRESP MATRIX'].data
+        nchan  = len(chan)
+        nen    = len(matrix)
+    men = np.array([(m[1]+m[0])/2 for m in matrix])
+    # ------------------------- #
+
+
+
+    # --------------------- #
+    # loop through channels #
+    ibin = np.zeros(nchan) - 1
+    ich, ibin[0] = 0, 1
+    smooth = nen * 1. / nchan
+    while ich < nchan:
+
+        # get the response curve at ich #
+        ie = np.argmin(np.abs(men - energy[ich]))
+        istart, ilen = matrix[ie][3], matrix[ie][4]
+        if not isinstance(istart, (list, np.ndarray)):
+            istart, ilen = [istart], [ilen]
+
+        iarr = np.concatenate([np.arange(i1, i1+i2) for i1,i2 in zip(istart, ilen)])
+        rarr = matrix[ie][5]
+        rarr = filters.gaussian_filter1d(rarr, smooth)
+
+
+        # work out fwhm at ich #
+        if not np.allclose(rarr, 0):
+            imax = np.argmax(rarr)
+
+            # limits of fwhm in energy grid units
+            ic1 = np.argmin(np.abs(rarr[:imax]-rarr[imax]/2.)) if imax !=0 else 0
+            ic2 = np.argmin(np.abs(rarr[imax:]-rarr[imax]/2.)) + imax
+            width = ic2 - ic1
+            
+        else:
+            width = nchan - ich
+
+
+        # get oversampling factor if we use_formula is requested #
+        if use_formula:
+            width = np.max([1, width])
+            ind = range(ich, ich+width)
+            if ind[-1] >= nchan:
+                ind = range(ich, nchan)
+            counts = np.max([sum(src_c[ind] - bgd_c[ind]), 1e-10] )
+            counts *= 1./width # per resolution element
+            x = np.log(counts*(1 + 0.20 *np.log(width)))
+            osample_fac = 1. if x<2.119 else (0.08+7./x + 1.8/x**2)/(1+5.9/x)
+            osample_fac = 1. / osample_fac
+        # ----- #
+
+
+        # bin width in channel units using oversample_fac
+        width = np.int(np.round(np.max([1, width*1./osample_fac])))
+        ind   = range(ich, np.min([ich+width, nchan]) )
+
+        
+        # increase width until snr > min_snr #
+        if min_snr:
+            snr = sum(src_c[ind] - bgd_c[ind])
+            while snr < 1 and ich+width<=nchan:
+                width += 1
+                ind = range(ich, min(ich+width, nchan) )
+                snr = sum(src_c[ind] - bgd_c[ind])
+            if snr > 0:
+                snr /= np.sqrt(sum(src_c[ind] + bgd_c[ind]))
+            while (snr < min_snr) and (ich+width < nchan):
+                ind = range(ich, ich+width)
+                if ind[-1] >= nchan:
+                    ind = range(ich, nchan)
+                    break
+
+                snr = sum(src_c[ind] - bgd_c[ind])
+                if snr <= 0:
+                    width += 1; continue
+                snr /= np.sqrt(sum(src_c[ind] + bgd_c[ind]))
+                width += 1
+       
+        # do we have a min_counts requirement? # 
+        if min_counts:
+            counts = sum(src_c[ind] - bgd_c[ind])
+            while (counts < min_counts) and (ich+width < nchan):
+                ind = range(ich, ich+width)
+                if ind[-1] >= nchan:
+                    ind = range(ich, nchan)
+                    break
+                counts = sum(src_c[ind] - bgd_c[ind])
+                width += 1
+        ich += len(ind)
+        if ich < nchan: ibin[ich] = 1
+    # --------------------- #
+
+
+    # ------------------ #
+    # write the grouping #
+
+    with pyfits.open(spec_file) as fp:
+        hdu = fp['SPECTRUM']
+        orig_cols = hdu.columns
+        if 'GROUPING' in orig_cols.names:
+            orig_cols['GROUPING'].array = np.array(ibin, np.int)
+        else:
+            orig_cols.add_col(pyfits.Column(name='GROUPING1', format='I', 
+                array=np.array(ibin, np.int)))
+        cols = pyfits.ColDefs(orig_cols)
+        tbl = pyfits.BinTableHDU.from_columns(cols)
+        hdu.header.update(tbl.header.copy())
+        tbl.header = hdu.header.copy()
+        grp = pyfits.HDUList([fp[0],tbl])
+        os.system('rm {0} &> /dev/null'.format(out_file))
+        grp.writeto(out_file)
+    print('Grouped file {} written sucessfully'.format(out_file))
+    # ------------------ #
