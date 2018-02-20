@@ -16,6 +16,28 @@ def run_cmd(cmd):
     if ret != 0:
        raise SystemExit('\nFailed in the command: ' + header)
 
+
+def check_pileup(event, regions):
+    """
+    event: unfiltered event file
+    regions: a list of src/bgd; we only need src
+    """
+    # ------------------------------------- #
+    # create event file for src region only #
+    root = event.split('/')[-1] 
+    cmd  = ('evselect table={} filteredset={}.pu.filtered expression="{}"'
+            ).format(event, root, regions[0])
+    run_cmd(cmd)
+    # -------------------------------------- #
+
+
+    # ------------ #
+    # run epatplot #
+    cmd = 'epatplot set={0}.pu.filtered plotfile={0}.pu.ps'.format(root)
+    run_cmd(cmd)
+    # ------------ #
+
+
 if __name__ == '__main__':
     pass
     p   = argparse.ArgumentParser(                                
@@ -42,6 +64,9 @@ if __name__ == '__main__':
             help="Extra arguments for evselect expression.")
     p.add_argument("--useRsp", metavar="useRsp", type=str, default='',
             help="Don't generate rmf/arf, and use these space separated list")
+    p.add_argument("--check_pileup", action='store_true', default=False,
+            help=("Check for pileup instead of calculating spectrum."
+                "event_file should contain unfiltered file"))
     args = p.parse_args()
 
     # ----------- #
@@ -95,6 +120,9 @@ if __name__ == '__main__':
                 regions[idx] += selector + line.split('#')[0].rstrip()
     # ------------------------ #
 
+    if args.check_pileup:
+        check_pileup(event, regions)
+        exit(0)
 
     # ------------------- #
     # extract src spectra #
