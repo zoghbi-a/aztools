@@ -105,11 +105,11 @@ if __name__ == '__main__':
         # S: do standard time filtering with rate<0.5
         # F: do other time filtering expression
         while True:
-            choice = raw_input(
+            choice = input(
                 ('Please select one option:\n<C>ontinue, '
                  '<S>tandard, <F>ilter, <R>ate\n->'))
             if choice not in ['C', 'S', 'F', 'R']: continue
-            filter_expr = raw_input('->') if choice in ['F', 'R'] else ''
+            filter_expr = input('->') if choice in ['F', 'R'] else ''
             break
     else:
         choice = 'S'

@@ -17,6 +17,8 @@ export SAS_CCF="$SAS_ODF/ccf.cif"
 case $mode in
     "pn" )
             #epchain exposure=2
+            #epchain exposure=2 runbackground=N keepintermediate=raw withoutoftime=Y
+            #epchain exposure=2 runatthkgen=N runepframes=N runbadpixfind=N runbadpix=N
             epchain
             mv *EVL* pn.fits;rm P*
             ;;

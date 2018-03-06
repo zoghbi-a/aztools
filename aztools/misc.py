@@ -16,7 +16,8 @@ def split_array(arr, length, strict=False, **kwargs):
     Keywords:
         overlap: (int) number < length of overlap between segments
         split_at_gaps: Split at non-finite values. Default True.
-
+        min_frac_length: (int) minimum seg length to keep. Use when strict=False
+        approx: length is used as an approximation.
 
     Returns:
         (result, indx)
@@ -28,6 +29,8 @@ def split_array(arr, length, strict=False, **kwargs):
     # defaults #
     split_at_gaps = kwargs.get('split_at_gaps', True)
     overlap = kwargs.get('overlap', 0)
+    min_frac_length = kwargs.get('min_frac_length', 0)
+    approx  = kwargs.get('approx', False)
 
 
     # make sure overlap makes sense if used #
@@ -50,13 +53,22 @@ def split_array(arr, length, strict=False, **kwargs):
     # split if length>0 #
     if length > 0:
 
+        # can we use approximate length? #
+        if approx:
+            ilength = [length if len(ii)<=length else 
+                        np.int(len(ii)/np.round(len(ii) / length)) for ii in iarr]
+        else:
+            ilength = [length] * len(iarr)
+
+
         # split every part of iarr #
-        iarr = [[ii[i:i+length] for i in 
-                    range(0, len(ii), length-overlap)] for ii in iarr]
+        iarr = [[ii[i:i+il] for i in 
+                    range(0, len(ii), il-overlap)] for ii,il in zip(iarr, ilength)]
 
 
         # flatten the list #
-        iarr = [j for i in iarr for j in i if not strict or len(j)==length]
+        iarr = [j for i in iarr for j in i if 
+                    (not strict and len(j)>=min_frac_length) or len(j)==ilength]
 
 
     res = [arr[i] for i in iarr]
@@ -266,11 +278,37 @@ def spec_2_ebins(spec_file, nbins=1, **kwargs):
     # bin in log space #
     lebin = np.logspace(np.log10(ebound[0]), np.log10(ebound[1]), nbins+1)
     # re-snap to the detector channels.
-    lbin = map(lambda en:np.argmin(np.abs(Emin-en)), lebin)
+    lbin = list(map(lambda en:np.argmin(np.abs(Emin-en)), lebin))
 
     with open(efile + '.log', 'w') as fp:
         fp.write('\n'.join(['{} {}'.format(
             lbin[i], 0.5*(Emin[cbin[i]]+Emax[cbin[i]])) 
             for i in range(nbins+1)]))
     print('Results written to {}'.format(efile + '.log'))
+
+
+def write_pha_spec(b1, b2 ,arr ,err ,stem):
+    """Write spectra to pha spectrum format and call 
+        flx2xsp to create a pha file
+
+    Parameters:
+        b1: lower boundaries of bins
+        b2: upper boundaries of bins
+        arr: array of `spectral` data
+        err: measurement error for arr
+        stem: stem name for the output spectra
+
+
+    """
+    if not (len(b1) == len(b2) == len(arr) == len(err)):
+        raise ValueError('b1, b2, arr, err need to have the same length')
+
+    de = b2 - b1
+    txt = '\n'.join(['{} {} {} {}'.format(b1[i], b2[i], 
+            arr[i]*de[i], err[i]*de[i]) for i in range(len(b1))]) + '\n'
+    with open('{}.xsp'.format(stem), 'w') as fp: fp.write(txt)
+
+    cmd = 'flx2xsp {0}.xsp {0}.pha {0}.rsp'.format(stem)
+    os.system(cmd)
+    print('{}.pha was created successfully'.format(stem))
 

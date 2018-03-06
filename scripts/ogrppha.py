@@ -36,6 +36,9 @@ if __name__ == '__main__':
     p.add_argument("--use_formula", action='store_true', default=True,
             help=('Calculate the oversampling factor using formula 36-37 '
                   'in Kaastra & Bleeker 2016'))
+    p.add_argument("--write_chan", action='store_true', default=True,
+            help=('Write grouping file, then use standard grppha.'
+                  'This requires heasoft and ngroups < 100'))
 
 
     # process input #
@@ -46,6 +49,7 @@ if __name__ == '__main__':
     min_counts  = args.counts
     osample_fac = args.osample_fac
     use_formula = args.use_formula
+    write_chan  = args.write_chan
 
 
     # some defaults #
@@ -121,7 +125,7 @@ if __name__ == '__main__':
 
 
         # work out fwhm at ich #
-        if not np.allclose(rarr, 0):
+        if not np.allclose(rarr, 0) and nchan > 100:
             imax = np.argmax(rarr)
 
             # limits of fwhm in energy grid units
@@ -130,7 +134,8 @@ if __name__ == '__main__':
             width = ic2 - ic1
             
         else:
-            width = nchan - ich
+            #width = nchan - ich
+            width = 1
 
 
         # get oversampling factor if we use_formula is requested #
@@ -190,21 +195,35 @@ if __name__ == '__main__':
 
     # ------------------ #
     # write the grouping #
-
-    with pyfits.open(spec_file) as fp:
-        hdu = fp['SPECTRUM']
-        orig_cols = hdu.columns
-        if 'GROUPING' in orig_cols.names:
-            orig_cols['GROUPING'].array = np.array(ibin, np.int)
-        else:
-            orig_cols.add_col(pyfits.Column(name='GROUPING1', format='I', 
-                array=np.array(ibin, np.int)))
-        cols = pyfits.ColDefs(orig_cols)
-        tbl = pyfits.BinTableHDU.from_columns(cols)
-        hdu.header.update(tbl.header.copy())
-        tbl.header = hdu.header.copy()
-        grp = pyfits.HDUList([fp[0],tbl])
+    
+    if write_chan:
+        # write an ascii file and use grppha #
+        ichan = np.arange(nchan)[ibin==1]
+        if ichan[-1] < nchan-1:
+            ichan = np.append(ichan, nchan)
+        bins = []
+        for ich in range(len(ichan)-1):
+            bins.append([ichan[ich], ichan[ich+1]-1, ichan[ich+1]-ichan[ich]])
+        txt = '\n'.join(['{} {} {}'.format(*x) for x in bins])
+        with open('tmp_chans.dat', 'w') as fp: fp.write(txt)
         os.system('rm {0} &> /dev/null'.format(out_file))
-        grp.writeto(out_file)
-    print('Grouped file {} written sucessfully'.format(out_file))
+        os.system('grppha {} {} "group tmp_chans.dat&exit"'.format(spec_file, out_file))
+    else:
+        # modify the file with pyfits #
+        with pyfits.open(spec_file) as fp:
+            hdu = fp['SPECTRUM']
+            orig_cols = hdu.columns
+            if 'GROUPING' in orig_cols.names:
+                orig_cols['GROUPING'].array = np.array(ibin, np.int)
+            else:
+                orig_cols.add_col(pyfits.Column(name='GROUPING', format='I', 
+                    array=np.array(ibin, np.int)))
+            cols = pyfits.ColDefs(orig_cols)
+            tbl = pyfits.BinTableHDU.from_columns(cols)
+            hdu.header.update(tbl.header.copy())
+            tbl.header = hdu.header.copy()
+            grp = pyfits.HDUList([fp[0],tbl])
+            os.system('rm {0} &> /dev/null'.format(out_file))
+            grp.writeto(out_file)
+        print('Grouped file {} written sucessfully'.format(out_file))
     # ------------------ #

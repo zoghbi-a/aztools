@@ -197,7 +197,7 @@ class LCurve(object):
             ye = np.sqrt(yp) / self.dt
         elif noise == 'norm':
             me = np.mean(self.rerr[idx])
-            y += np.random.norm(len(y)) * ye
+            y += np.random.randn(len(y)) * ye
             ye = np.zeros_like(y) + ye
 
         # now update fill in the gaps with length<maxn #
