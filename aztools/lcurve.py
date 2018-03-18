@@ -629,11 +629,24 @@ class LCurve(object):
         cl = _a([np.exp(np.mean(np.log(crss[ii]))) for ii in idx])
 
         # phase lag and its error #
+        # g2 is caluclated without noise subtraciton
+        # see paragraph after eq. 17 in Nowak+99
         lag = np.angle(cl)
-        n2 = ((p - n)*n + (P - N)*N + n*N) / fqm
-        g2 = (np.abs(c)**2 - n2) / (p * P)
+        n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
+        g2  = (np.abs(c)**2 - n2) / (p * P)
         dum = (1 - g2) / (2*g2*fqm)
         lag_e = np.sqrt(np.abs(dum))
+
+
+        # coherence gamma_2 #
+        # here we subtract the noise; see eq. 8
+        # in Vaughan+97 and related definitions
+        coh   = (np.abs(c)**2 - n2) / ((p-n) * (P-N))
+        coh[(coh<0) | (coh>1)] = 1e-5
+        dcoh  = (2/fqm)**0.5 * (1 - coh)/np.sqrt(coh)
+        coh_e = coh * (fqm**-0.5) * ((2*n2*n2*fqm)/(np.abs(c)**2 - n2)**2 + 
+                (n**2/(p-n)**2) + (N**2/(P-N)**2) + (fqm*dcoh/coh**2))**0.5
+        
 
         # mask out points where coherence is undefined #
         if mask_coh:
@@ -657,7 +670,7 @@ class LCurve(object):
 
 
         # return #
-        desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit}
+        desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 'coh': [coh, coh_e]}
 
         return f, lag, lag_e, desc
 

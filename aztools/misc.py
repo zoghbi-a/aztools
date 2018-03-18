@@ -2,6 +2,7 @@
 
 import numpy as np
 import os
+from itertools import groupby
 
 
 def split_array(arr, length, strict=False, **kwargs):
@@ -16,20 +17,19 @@ def split_array(arr, length, strict=False, **kwargs):
     Keywords:
         overlap: (int) number < length of overlap between segments
         split_at_gaps: Split at non-finite values. Default True.
-        min_frac_length: (int) minimum seg length to keep. Use when strict=False
+        min_seg_length: (int) minimum seg length to keep. Use when strict=False
         approx: length is used as an approximation.
 
     Returns:
         (result, indx)
 
     """
-    from itertools import groupby
 
 
     # defaults #
     split_at_gaps = kwargs.get('split_at_gaps', True)
     overlap = kwargs.get('overlap', 0)
-    min_frac_length = kwargs.get('min_frac_length', 0)
+    min_seg_length = kwargs.get('min_seg_length', 0)
     approx  = kwargs.get('approx', False)
 
 
@@ -68,7 +68,7 @@ def split_array(arr, length, strict=False, **kwargs):
 
         # flatten the list #
         iarr = [j for i in iarr for j in i if 
-                    (not strict and len(j)>=min_frac_length) or len(j)==ilength]
+                    (not strict and len(j)>=min_seg_length) or len(j)==length]
 
 
     res = [arr[i] for i in iarr]
@@ -88,6 +88,7 @@ def group_array(arr, by_n=None, bins=None, **kwargs):
     Keywords:
         do_unique: if true, the groupping is done for the 
             unique values.
+        min_per_bin: minimum number of elements per bin
 
     """
 
@@ -129,6 +130,17 @@ def group_array(arr, by_n=None, bins=None, **kwargs):
         ind = [np.argwhere(ib==i)[:,0] for i in range(len(bins)-1)]
     else:
         raise ValueError('No binning defined')
+
+    # enforce minimum per bin if requesed #
+    min_per_bin = kwargs.get('min_per_bin', 1)
+    new_ind, grp = [], [[]]
+    for ib in range(len(ind)):
+        grp.append(ind[ib])
+        cgrp = np.concatenate(grp)
+        if len(cgrp) >= min_per_bin:
+            new_ind.append(np.array(cgrp, dtype=np.int))
+            grp = [[]]
+    ind = new_ind
 
     return ind
 
