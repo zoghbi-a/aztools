@@ -3,6 +3,7 @@
 import numpy as np
 import os
 from itertools import groupby
+import sys
 
 
 def split_array(arr, length, strict=False, **kwargs):
@@ -323,4 +324,25 @@ def write_pha_spec(b1, b2 ,arr ,err ,stem):
     cmd = 'flx2xsp {0}.xsp {0}.pha {0}.rsp'.format(stem)
     os.system(cmd)
     print('{}.pha was created successfully'.format(stem))
+
+
+def print_progress(step, total, final=False):
+    """Print progress in one line
+    
+    Args:
+        step: current step; assumed to start at 0
+        total: total number of steps
+        final: is this the final step
+
+    """
+
+    step += 1
+    curr_idx = np.int( step * 50 / total)
+    text = '-'*curr_idx + ' '*(49-curr_idx) + '|'
+    txt = ( '|{:02g} %| '.format(np.int(100.*step/total)) + text + '\r')
+    sys.stdout.write(txt)
+    sys.stdout.flush()
+    if final:
+        sys.stdout.write('\n\n\n')
+        
 
