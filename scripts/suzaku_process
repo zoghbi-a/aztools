@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# syntax: suzaku_process INDIR
+if [ $# != 2 ] ; then
+    echo "Syntax:  suzaku_process PATH_TO_OBSID INSTR"
+    exit 1
+fi
+
+# initialize heasoft
+source $HEADAS/headas-init.sh
+
+
+# other parameters
+indir=$1
+instr=$2
+stem=ae`basename ${indir}`
+outdir=${indir}_p/$instr/event_cl
+mkdir -p $outdir
+
+
+# run the pipeline #
+aepipeline indir=$indir outdir=$outdir steminputs=$stem \
+ entry_stage=1 exit_stage=2 clobber=yes instrument=$instr
+
+
