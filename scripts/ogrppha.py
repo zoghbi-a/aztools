@@ -33,10 +33,10 @@ if __name__ == '__main__':
     p.add_argument('-f', '--osample_fac', metavar='osample_fac', 
             type=float, default=3,
             help='The oversampling factor in units of the local FWHM')
-    p.add_argument("--use_formula", action='store_true', default=True,
+    p.add_argument("--use_formula", action='store_true', default=False,
             help=('Calculate the oversampling factor using formula 36-37 '
                   'in Kaastra & Bleeker 2016'))
-    p.add_argument("--write_chan", action='store_true', default=True,
+    p.add_argument("--write_chan", action='store_true', default=False,
             help=('Write grouping file, then use standard grppha.'
                   'This requires heasoft and ngroups < 100'))
 

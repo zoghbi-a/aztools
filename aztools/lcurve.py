@@ -67,7 +67,6 @@ class LCurve(object):
         """
 
         if self.iseven:
-            print('LCurve is already even')
             return self
 
         # make sure time axis can be made even #
@@ -626,13 +625,13 @@ class LCurve(object):
         n  = _a([np.mean(nois[i]) for i in idx])
         N  = _a([np.mean(Nois[i]) for i in idx])
         c  = _a([np.mean(crss[ii]) for ii in idx])
-        cl = _a([np.exp(np.mean(np.log(crss[ii]))) for ii in idx])
 
         # phase lag and its error #
         # g2 is caluclated without noise subtraciton
         # see paragraph after eq. 17 in Nowak+99
-        lag = np.angle(cl)
+        # see eq. 11, 12 in Uttley+14
         n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
+        lag = np.angle(c)
         g2  = (np.abs(c)**2 - n2) / (p * P)
         dum = (1 - g2) / (2*g2*fqm)
         lag_e = np.sqrt(np.abs(dum))

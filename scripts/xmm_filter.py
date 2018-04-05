@@ -20,8 +20,7 @@ if __name__ == '__main__':
     pass
     p   = argparse.ArgumentParser(                                
         description='''
-        Prepare an event file for light curve extractions.
-        This should be called before xmmlc.py
+        Prepare an event file for spectra and light curve extractions.
         ''',            
         formatter_class=argparse.ArgumentDefaultsHelpFormatter ) 
 

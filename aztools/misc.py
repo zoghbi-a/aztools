@@ -32,6 +32,8 @@ def split_array(arr, length, strict=False, **kwargs):
     overlap = kwargs.get('overlap', 0)
     min_seg_length = kwargs.get('min_seg_length', 0)
     approx  = kwargs.get('approx', False)
+    if strict:
+        approx = False
 
 
     # make sure overlap makes sense if used #
