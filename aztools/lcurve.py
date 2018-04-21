@@ -138,7 +138,7 @@ class LCurve(object):
         f2 = (f2*f).mean(1)
 
         if error == 'poiss':
-            re = np.sqrt(r*dt_new*f.mean(1))/(dt_new * f.mean(1))
+            re = np.sqrt(r*dt_new)/(dt_new)
         else:
             re = np.nansum(re**2, 1)**0.5 / fs
             re[~it] = np.nan
@@ -148,7 +148,7 @@ class LCurve(object):
 
         # filter on fracexp if needed #
         if min_exp > 0:
-            it[f < min_exp] = False
+            it[f2 < min_exp] = False
 
         # return a new LCurve object #
         return LCurve(t[it], r[it], re[it], dt_new, f2[it])
