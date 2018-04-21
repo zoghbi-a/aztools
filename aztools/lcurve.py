@@ -89,7 +89,7 @@ class LCurve(object):
 
 
 
-    def rebin(self, factor, error='poiss', min_exp=0.0):
+    def rebin(self, factor, error='norm', min_exp=0.0):
         """Rebin the light curve to so new_dt = dt*factor
         
         Parameters:
@@ -125,20 +125,22 @@ class LCurve(object):
         r  = lc.rate[:nt_scal].reshape(nt_new, factor)
         re = lc.rerr[:nt_scal].reshape(nt_new, factor)
         f  = lc.fexp[:nt_scal].reshape(nt_new, factor)
+        f2 = np.ones_like(r)
+        f2[np.isnan(r)] = 0.0
 
 
         # do binning #
         t  = t.mean(1)
-        it = np.array([~np.all(_f==0) for _f in f])
-        f  = f.mean(1)
-        f_ = np.clip(f, 1e-20, np.inf)
-        r  = np.nansum(r, 1) * 1./ (factor*f_)
+        it = np.array([~np.all(_f==0) for _f in f2])
+        fs = np.nansum(np.clip(f2, 1e-20, np.inf), 1)
+        r  = np.nansum(r, 1) / fs
         r[~it] = np.nan
+        f2 = (f2*f).mean(1)
 
         if error == 'poiss':
-            re = np.sqrt(r*dt_new)/dt_new
+            re = np.sqrt(r*dt_new*f.mean(1))/(dt_new * f.mean(1))
         else:
-            re = np.nansum(re**2, 1)**0.5
+            re = np.nansum(re**2, 1)**0.5 / fs
             re[~it] = np.nan
 
         # leave nan values if original lc had nan (i.e it was even)
@@ -149,7 +151,7 @@ class LCurve(object):
             it[f < min_exp] = False
 
         # return a new LCurve object #
-        return LCurve(t[it], r[it], re[it], dt_new, f[it])
+        return LCurve(t[it], r[it], re[it], dt_new, f2[it])
 
 
 
@@ -629,7 +631,8 @@ class LCurve(object):
         # phase lag and its error #
         # g2 is caluclated without noise subtraciton
         # see paragraph after eq. 17 in Nowak+99
-        # see eq. 11, 12 in Uttley+14
+        # see eq. 11, 12 in Uttley+14 (is this wrong. Nowak clearly 
+        # states that the noise shouldn't be subtracted)
         n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
         lag = np.angle(c)
         g2  = (np.abs(c)**2 - n2) / (p * P)

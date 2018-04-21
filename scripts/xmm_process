@@ -32,7 +32,20 @@ case $mode in
             mv *M1*EVL* m1.fits; mv *M2*EVL* m2.fits;rm P*
             ;;
     "rgs" )
-            rgsproc orders='1 2' bkgcorrect=no withmlambdacolumn=yes 
+            rgsproc orders='1 2' bkgcorrect=no withmlambdacolumn=yes
+            root_1=`ls *R1*SRSPEC1*`
+            root_2=`ls *R2*SRSPEC1*`
+            cp $root_1 spec_r1.src
+            cp $root_2 spec_r2.src
+            cp ${root_1/SR/BG} spec_r1.bgd
+            cp ${root_2/SR/BG} spec_r2.bgd
+            cp ${root_1/SRSPEC/RSPMAT} spec_r1.rsp
+            cp ${root_2/SRSPEC/RSPMAT} spec_r2.rsp
+            rgscombine pha="spec_r1.src spec_r2.src" bkg="spec_r1.bgd spec_r2.bgd" \
+                rmf="spec_r1.rsp spec_r2.rsp" filepha="spec_rgs.src" filebkg="spec_rgs.bgd" \
+                filermf="spec_rgs.rsp"
+            rm spec_rgs.grp &> /dev/null
+            grppha spec_rgs.src spec_rgs.grp "group min 20&exit"
             ;;
     "omf" )
             omfchain

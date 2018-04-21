@@ -6,7 +6,7 @@ from itertools import groupby
 import sys
 
 
-def split_array(arr, length, strict=False, **kwargs):
+def split_array(arr, length, strict=False, *args, **kwargs):
     """Split an array arr to segments of length length.
 
     Parameters:
@@ -15,6 +15,9 @@ def split_array(arr, length, strict=False, **kwargs):
         strict: force all segments to have length length. Some data 
             may be discarded
 
+    Args:
+        any other arrays similar to arr to be split
+
     Keywords:
         overlap: (int) number < length of overlap between segments
         split_at_gaps: Split at non-finite values. Default True.
@@ -22,7 +25,7 @@ def split_array(arr, length, strict=False, **kwargs):
         approx: length is used as an approximation.
 
     Returns:
-        (result, indx)
+        (result, indx, ...{other arrays if given})
 
     """
 
@@ -75,7 +78,8 @@ def split_array(arr, length, strict=False, **kwargs):
 
 
     res = [arr[i] for i in iarr]
-    return res, iarr
+    others = tuple([[ar[i] for i in iarr] for ar in args])
+    return (res, iarr) + others
 
 
 def group_array(arr, by_n=None, bins=None, **kwargs):

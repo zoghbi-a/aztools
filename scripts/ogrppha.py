@@ -80,7 +80,7 @@ if __name__ == '__main__':
     # --------------------- #
     # get background counts #
     bgd_c = np.zeros_like(src_c)
-    if not bgd_file in [None, 'none']:
+    if not bgd_file in [None, 'none', 'NONE']:
         with pyfits.open(bgd_file) as fp:
             bgd_c  = np.array(fp['SPECTRUM'].data.field(1), np.double)
             bgd_ex = fp['SPECTRUM'].header['EXPOSURE'] 
@@ -118,7 +118,9 @@ if __name__ == '__main__':
         istart, ilen = matrix[ie][3], matrix[ie][4]
         if not isinstance(istart, (list, np.ndarray)):
             istart, ilen = [istart], [ilen]
-
+        if len(istart) == 0 or len(ilen) == 0:
+            ich += 1
+            continue
         iarr = np.concatenate([np.arange(i1, i1+i2) for i1,i2 in zip(istart, ilen)])
         rarr = matrix[ie][5]
         rarr = filters.gaussian_filter1d(rarr, smooth)
@@ -210,14 +212,12 @@ if __name__ == '__main__':
         os.system('grppha {} {} "group tmp_chans.dat&exit"'.format(spec_file, out_file))
     else:
         # modify the file with pyfits #
-        with pyfits.open(spec_file) as fp:
+        os.system('rm {} &> /dev/null'.format(out_file))
+        os.system('grppha {} {} "group min 20&exit" &> /dev/null'.format(spec_file, out_file))
+        with pyfits.open(out_file) as fp:
             hdu = fp['SPECTRUM']
             orig_cols = hdu.columns
-            if 'GROUPING' in orig_cols.names:
-                orig_cols['GROUPING'].array = np.array(ibin, np.int)
-            else:
-                orig_cols.add_col(pyfits.Column(name='GROUPING', format='I', 
-                    array=np.array(ibin, np.int)))
+            orig_cols['GROUPING'].array = np.array(ibin, np.int) 
             cols = pyfits.ColDefs(orig_cols)
             tbl = pyfits.BinTableHDU.from_columns(cols)
             hdu.header.update(tbl.header.copy())
