@@ -74,7 +74,7 @@ class LCurveTest(unittest.TestCase):
         np.testing.assert_array_almost_equal(
                 lc1.rate, np.array([0., 2., 7]))
         np.testing.assert_array_almost_equal(
-                lc1.rerr, (np.array([0., 2., 7])*2)**0.5/2)
+                lc1.rerr, (np.array([((2.**0.5)+ (7**0.5))/2, (2.**0.5), (7**0.5)])))
 
         # when original lc is even #
         lc = lc.make_even()
@@ -104,7 +104,7 @@ class LCurveTest(unittest.TestCase):
         lc = lc.make_even()
         lc.interp_small_gaps(maxgap=1, noise=None)
         np.testing.assert_array_almost_equal(lc.rate,  [0, 1, 2]+[np.nan]*4+[7])
-        np.testing.assert_array_almost_equal(lc.rerr,  [1, 0, 3]+[np.nan]*4+[8])
+        np.testing.assert_array_almost_equal(lc.rerr,  [1, 4, 3]+[np.nan]*4+[8])
 
     
 
@@ -123,6 +123,7 @@ class LCurveTest(unittest.TestCase):
         # no noise, all gaps #
         lc.interp_small_gaps(maxgap=20, noise=None)
         np.testing.assert_array_almost_equal(lc.rate,  [0, 1, 2, 3, 4, 5, 6, 7])
+        np.testing.assert_array_almost_equal(lc.rerr,  [1, 4, 3, 4, 4, 4, 4, 8])
 
 
 
@@ -166,7 +167,29 @@ class LCurveTest(unittest.TestCase):
 
         lc.interp_small_gaps(maxgap=1, noise=None)
         np.testing.assert_array_almost_equal(lc.rate,  [0, 1, 2]+[np.nan]*3+[6,6])
-        np.testing.assert_array_almost_equal(lc.rerr,  [1, 0, 3]+[np.nan]*3+[7,0])
+        np.testing.assert_array_almost_equal(lc.rerr,  [1, 11/3, 3]+[np.nan]*3+[7,11/3])
+
+    
+
+    def test_interp_small_gaps_5(self):
+        # t: 0  1  2  3  4  5  6  7
+        # x: 0  1  2  3  4  5  6  7
+        # xe:1  2  3  4  5  6  7  8
+        #  : *  -  *  -  -  -  -  * 
+        t  = np.arange(8, dtype=np.double)
+        x  = np.arange(8, dtype=np.double)
+        xe = np.arange(1, 9)*1.
+        ind = np.array([0, 2, 7])
+        lc = az.LCurve(t[ind], x[ind], xe[ind], 1.0)
+        lc = lc.make_even()
+
+
+        # norm #
+        lc.interp_small_gaps(maxgap=1, noise='norm', seed=123)
+        np.random.seed(123)
+        pp = np.random.randn(8)[1]*4 + 1
+        np.testing.assert_array_almost_equal(lc.rate,  [0, pp, 2]+[np.nan]*4+[7])
+        np.testing.assert_array_almost_equal(lc.rerr,  [1, 4, 3]+[np.nan]*4+[8])
 
 
 

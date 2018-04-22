@@ -110,6 +110,7 @@ class LCurve(object):
 
 
         # make lc evenly sampled, so we bin arrays easily #
+        iseven = self.iseven
         lc = self.make_even()
 
 
@@ -125,33 +126,40 @@ class LCurve(object):
         r  = lc.rate[:nt_scal].reshape(nt_new, factor)
         re = lc.rerr[:nt_scal].reshape(nt_new, factor)
         f  = lc.fexp[:nt_scal].reshape(nt_new, factor)
-        f2 = np.ones_like(r)
-        f2[np.isnan(r)] = 0.0
+
+        # rescale the rates to pre-fexp counts/bin #
+        c  = r  * (f * lc.dt)
+        ce = re * (f * lc.dt)
 
 
         # do binning #
-        t  = t.mean(1)
-        it = np.array([~np.all(_f==0) for _f in f2])
-        fs = np.nansum(np.clip(f2, 1e-20, np.inf), 1)
-        r  = np.nansum(r, 1) / fs
-        r[~it] = np.nan
-        f2 = (f2*f).mean(1)
-
+        t  = np.mean(t, 1)
+        c  = np.nansum(c, 1)
         if error == 'poiss':
-            re = np.sqrt(r*dt_new)/(dt_new)
+            ce = np.sqrt(c)
+            ce[ce==0] = np.nanmean(ce[ce!=0])
         else:
-            re = np.nansum(re**2, 1)**0.5 / fs
-            re[~it] = np.nan
+            ce = np.nansum(ce**2, 1)**0.5
 
-        # leave nan values if original lc had nan (i.e it was even)
-        if self.iseven: it = np.isfinite(it)
+        f  = np.mean(f, 1)
+        fs = np.array(f)
+        it = (fs != 0)
+        fs[~it] = np.nan
+        r  = c /(dt_new * fs)
+        re = ce/(dt_new * fs)
 
-        # filter on fracexp if needed #
+
+
+        # # leave nan values if original lc had nan (i.e it was even)
+        if iseven: 
+            it = np.ones_like(it) == 1
+
+        # # filter on fracexp if needed #
         if min_exp > 0:
-            it[f2 < min_exp] = False
+            it[f < min_exp] = False
 
         # return a new LCurve object #
-        return LCurve(t[it], r[it], re[it], dt_new, f2[it])
+        return LCurve(t[it], r[it], re[it], dt_new, f[it])
 
 
 
@@ -188,18 +196,27 @@ class LCurve(object):
 
 
 
-        # interpolate all values than, keep only those with length<maxn #
+        # interpolate all values then keep only those with length<maxn #
         idx = np.isfinite(self.rate)
         y  = np.interp(self.time, self.time[idx], self.rate[idx])
         ye = np.zeros_like(y)
-        if noise == 'poiss':
+        me = np.mean(self.rerr[idx])
+        if noise is None:
+            # no noise requested; the value is not altered from the interp
+            # while the error is the average of all errors
+            ye += me
+
+        elif noise == 'poiss':
+            # apply noise to counts/bin then convert back to counts/s
             yp = np.random.poisson(y*self.dt)
             y  = yp / self.dt
             ye = np.sqrt(yp) / self.dt
+            # reset points where y=0 (hence ye=0)
+            ye[yp == 0] = me
+        
         elif noise == 'norm':
-            me = np.mean(self.rerr[idx])
-            y += np.random.randn(len(y)) * ye
-            ye = np.zeros_like(y) + ye
+            y  += np.random.randn(len(y)) * me
+            ye += me
 
         # now update fill in the gaps with length<maxn #
         self.rate[iinf] = y[iinf]
