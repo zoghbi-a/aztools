@@ -25,7 +25,7 @@ class SimLC(object):
 
 
         # seed random generator #
-        np.random.seed(seed)
+        self.rng = np.random.RandomState(seed)
 
 
 
@@ -131,9 +131,10 @@ class SimLC(object):
         psd *= renorm
 
 
+
         # inverse fft #
-        ix = ( np.random.randn(len(psd)) * np.sqrt(0.5*psd)
-             + np.random.randn(len(psd)) * np.sqrt(0.5*psd)*1j )
+        ix = ( self.rng.randn(len(psd)) * np.sqrt(0.5*psd)
+             + self.rng.randn(len(psd)) * np.sqrt(0.5*psd)*1j )
         ix[0] = n * mu
         ix[-1] = np.abs(ix[-1])
         self.x = np.fft.irfft(ix)
@@ -210,11 +211,12 @@ class SimLC(object):
         Parameters:
             norm: if None, add Poisson noise, else
                 gaussian noise, with std=norm
+            seed: random seed
             dt: used with norm is None. It gives the time samling
                 of the light curve. Poisson noise is applied to
                 the counts per bin. x in this case is the count rate.
                 Counts/bin = Rate/sec * dt
-            seed: random seed
+            
 
         Returns:
             array similar to x with noise added
@@ -222,12 +224,12 @@ class SimLC(object):
         """
 
         if seed is not None:
-            np.random.seed(seed)
+            self.rng.seed(seed)
 
         if norm is None:
-            xn = np.random.poisson(x*dt)/dt
+            xn = self.rng.poisson(x*dt)/dt
         else:
-            xn = np.random.randn(len(x)) * norm + x
+            xn = self.rng.randn(len(x)) * norm + x
         return xn
 
 

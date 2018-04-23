@@ -410,6 +410,9 @@ class LCurve(object):
                 assume, poisson noise.
             bgd: array or list of background rates. In this case,
                 rate above is assumed background subtracted.
+            taper: apply Hanning tapering before calculating the psd
+                see p388 Bendat & Piersol; the psd need to be multiplied
+                by 8/3 to componsate for the reduced variance.
         
         Return:
             freq, rpsd, nois. 
@@ -431,6 +434,12 @@ class LCurve(object):
             rerr = [np.sqrt((r+b)/dt) for r,b in zip(rate, bgd)]
 
 
+        # tapering ? #
+        taper = kwargs.get('taper', False)
+        if taper:
+            rate = [(r-r.mean()) * np.hanning(len(r)) + r.mean() for r in rate]
+
+
         # fft; remove the 0-freq and the nyquist #
         freq = [np.fft.rfftfreq(len(r), dt)[1:-1] for r in rate]
         rfft = [np.fft.rfft(r)[1:-1] for r in rate]
@@ -440,6 +449,10 @@ class LCurve(object):
         expo = {'var':0, 'leahy':1, 'rms':2} 
         rpsd = [(2.*dt / (len(r) * mu**expo[norm])) * np.abs(rf)**2
                     for r,rf,mu in zip(rate, rfft, mean)]
+
+        # renormalize rpsd if tapering has been applied #
+        if taper:
+            rpsd = [r * 8/3 for r in rpsd]
 
         ## ------ noise level ------- ##
         # noise level is: 2*(mu+bgd)/(mu^2) for RMS normalization
