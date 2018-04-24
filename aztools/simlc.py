@@ -142,6 +142,84 @@ class SimLC(object):
 
 
 
+    def simulate_pdf(self, n, dt, mu, norm='var', pdf='lognorm(s=0.5)'):
+        """Simulate a light curve using the psd model stored in 
+            self.psd_models, added with add_model, and enforcing
+            log-normal distribution.
+            This uses the algorithm of Emmanoulopoulos+ (2013) MNRAS 433, 907–927
+
+        Parameters:
+            n: number of points in the light curve
+            dt: time sampling
+            mu: the light curve mean
+            norm: string var|rms|leahy
+            pdf: a string representing a probability distribution
+                from scipy.stats. e.g. lognorm(s=0.5)
+
+        Returns:
+            Nothing. The simulated light curve and time are stored
+            in self.t and self.x
+
+        Note:
+            The normalized psd is stored in self.normalized_psd
+
+        """
+
+        # make sure the norm is known #
+        if not (norm in ['var', 'leahy', 'rms']):
+            raise ValueError('norm need to be one of var|rms|leahy')
+
+        import scipy.stats as st
+        lognorm = eval('st.{}'.format(pdf))
+
+
+        # calculate psd #
+        freq = np.fft.rfftfreq(n, dt)
+        psd = self.calculate_model(freq)
+        self.normalized_psd = np.array([freq, psd])
+
+        
+        # get correct renoramlization #
+        expon = {'var':0, 'leahy':1, 'rms':2}
+        renorm = mu**expon[norm] * n/(2.*dt)
+        psd *= renorm
+
+
+
+        # do the algorithm #
+        ix = ( self.rng.randn(len(psd)) * np.sqrt(0.5*psd)
+             + self.rng.randn(len(psd)) * np.sqrt(0.5*psd)*1j )
+        ix[0] = n * mu
+        ix[-1] = np.abs(ix[-1])
+        # step-1 #
+        anorm  = np.abs(ix)
+
+        # step-2; before loop starts #
+        xsim   = lognorm.rvs(n)
+        diff   = 1.0
+        while diff > 1e-4:
+
+            # step-2; main loop #
+            psim   = np.angle(np.fft.rfft(xsim))
+
+            # step-3
+            xsim_j = np.fft.irfft(anorm * np.exp(1j*psim))
+
+            # step-4
+            xsim_j[np.argsort(xsim_j)] = xsim[np.argsort(xsim)]
+            
+            # check for convergenece & prepare for next loop #
+            diff   = np.sum((xsim - xsim_j)**2)/n
+            xsim[:]= xsim_j[:]
+
+
+        # get the final light curve
+        psim   = np.angle(np.fft.rfft(xsim))
+        self.x = np.fft.irfft(anorm * np.exp(1j*psim))
+        self.t = np.arange(n) * dt * 1.0
+
+
+
     def apply_lag(self, phase=False):
         """Apply lag in self.lag_models to the simulate self.c
 
@@ -224,12 +302,12 @@ class SimLC(object):
         """
 
         if seed is not None:
-            self.rng.seed(seed)
+            np.random.seed(seed)
 
         if norm is None:
-            xn = self.rng.poisson(x*dt)/dt
+            xn = np.random.poisson(x*dt)/dt
         else:
-            xn = self.rng.randn(len(x)) * norm + x
+            xn = np.random.randn(len(x)) * norm + x
         return xn
 
 

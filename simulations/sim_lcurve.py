@@ -245,16 +245,131 @@ def psd_5():
     # plot & save #
     for iplt in range(2):
         p  = psd[:, iplt]
+        pp = np.percentile(p[:,1],[50,16,100-16],0)
         ax = plt.subplot(1,2,iplt+1)
         ax.set_xscale('log'); ax.set_yscale('log')
         plt.errorbar(p[0,0], p[:,1].mean(0), p[:,1].std(0), 
-            fmt='o', ms=3, alpha=0.5) 
+            fmt='o', ms=3, alpha=0.5)
+        plt.fill_between(p[0,0], p[:,1].mean(0)-p[:,2].mean(0), p[:,1].mean(0)+p[:,2].mean(0),
+                alpha=0.5)
+        plt.plot(p[0,0], pp[0], '-.', lw=0.8)
+        plt.plot(p[0,0], pp[1], ':', lw=0.8)
+        plt.plot(p[0,0], pp[2], ':', lw=0.8)
         plt.plot(sim.normalized_psd[0,1:], sim.normalized_psd[1,1:], lw=0.5)
     #plt.show();exit(0)
     plt.savefig('png/psd_5.png')
 
 
+def psd_6():
+    """Simple powerlaw psd, no noise, with BINNING, RED NOISE LEAK.
+    Compare expontiation to no expontiation
 
+
+    #1 The variance in the exponential light curves is higher than the simple case.
+    #2 Red-noise leak is severe is the exponential light curves 
+    """
+    n    = 512
+    dt   = 1.0
+    mu   = 100
+    nsim = 200
+
+
+
+    sim = [az.SimLC(seed=467) for i in [0,1]]
+    for s in sim:
+        #s.add_model('powerlaw', [1e-2, -2])
+        s.add_model('broken_powerlaw', [1e-2, -1, -2, 1e-1])
+
+    psd = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim[0].simulate(n*8, dt, mu, norm='var')
+        p  = az.LCurve.calculate_psd(sim[0].x[:n], dt, 'var', taper=True)
+        psd.append(az.LCurve.bin_psd(p[0], p[1], {'by_n':[10,1]}, p[2], logavg=True)[:3])
+
+        sim[1].simulate_pdf(n*8, dt, mu, norm='var', pdf='lognorm(s=0.5)')
+        p  = az.LCurve.calculate_psd(sim[1].x[:n], dt, 'var', taper=True)
+        psd.append(az.LCurve.bin_psd(p[0], p[1], {'by_n':[10,1]}, p[2], logavg=True)[:3])
+
+    psd = np.array(psd).reshape((nsim, 2, 3, -1))
+
+    # prepare for plotting #
+    plt.rcParams['figure.figsize'] = [9, 4]
+    plt.rcParams['font.size'] = 7
+
+    # plot & save #
+    ax = plt.subplot(131)
+    ax.set_xscale('log'); ax.set_yscale('log')
+    iplt = 0
+    p  = psd[:, iplt]
+    pp = np.percentile(p[:,1],[50,16,100-16],0)
+    plt.plot(p[0,0], pp[0], '-', alpha=0.5, color='C%d'%(iplt)) 
+    plt.fill_between(p[0,0], pp[1], pp[2], facecolor='C%d'%(iplt), alpha=0.2)
+    plt.errorbar(p[0,0], p[:,1].mean(0), p[:,2].mean(0), alpha=0.4, fmt='o', ms=4)
+    plt.plot(sim[iplt].normalized_psd[0,1:], sim[iplt].normalized_psd[1,1:], color='C2')
+
+    ax = plt.subplot(132)
+    ax.set_xscale('log'); ax.set_yscale('log')
+    iplt = 1
+    p  = psd[:, iplt]
+    pp = np.percentile(p[:,1],[50,16,100-16],0)
+    plt.plot(p[0,0], pp[0], '-', alpha=0.5, color='C%d'%(iplt)) 
+    plt.fill_between(p[0,0], pp[1], pp[2], facecolor='C%d'%(iplt), alpha=0.2)
+    plt.errorbar(p[0,0], p[:,1].mean(0), p[:,2].mean(0), alpha=0.4, fmt='o', ms=4)
+    plt.plot(sim[iplt].normalized_psd[0,1:], sim[iplt].normalized_psd[1,1:], color='C2')
+
+    ax = plt.subplot(133)
+    plt.plot(sim[0].t[:n], sim[0].x[:n])
+    plt.plot(sim[1].t[:n], sim[1].x[:n])
+    plt.tight_layout(pad=0)
+    plt.savefig('png/psd_6.png')
+
+
+def psd_7():
+    """Simple powerlaw psd, no noise, with BINNING, RED NOISE LEAK.
+    Different noise levels (means)
+    """
+    n    = 2048
+    dt   = 1.0
+    mu   = [100, 10, 100, 500, 2000]
+    nsim = 200
+
+
+
+    sim = az.SimLC(seed=67384)
+    #sim.add_model('powerlaw', [1e-5, -2])
+    sim.add_model('broken_powerlaw', [1e-5, -1, -2, 1e-3])
+
+    psd = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        pp = []
+        for m in mu:
+            #sim.simulate_pdf(n*4, dt, m, norm='rms', pdf='lognorm(s=0.3)')
+            sim.simulate(n*4, dt, m, norm='rms')
+            x = sim.x[:n]
+            if len(pp)!=0:
+               x = sim.add_noise(x)
+            p  = az.LCurve.calculate_psd(x, dt, 'rms', taper=True)
+            pp.append(az.LCurve.bin_psd(p[0], p[1], {'by_n':[10,1]}, p[2], logavg=True)[:3])
+        psd.append(pp)
+
+    psd = np.array(psd)
+
+    # prepare for plotting #
+    plt.rcParams['figure.figsize'] = [6, 6]
+    plt.rcParams['font.size'] = 7
+
+    # plot & save #
+    for iplt in range(5):
+        p  = psd[:, iplt]
+        plt.xscale('log'); plt.yscale('log')
+        plt.fill_between(p[0,0], p[:,1].mean(0)-p[:,1].std(0), p[:,1].mean(0)+p[:,1].std(0), 
+            alpha=0.5) 
+    plt.plot(sim.normalized_psd[0,1:], sim.normalized_psd[1,1:], lw=0.5)
+    plt.savefig('png/psd_7.png')
 
 
 if __name__ == '__main__':
@@ -278,6 +393,8 @@ if __name__ == '__main__':
             help="Simple psd simulation with BINNING & RED LEAK & different seglen")
     p.add_argument('--psd_6', action='store_true', default=False,
             help="BINNING & RED LEAK & Expontiation")
+    p.add_argument('--psd_7', action='store_true', default=False,
+            help="BINNING & RED LEAK & Differnet noise levels (means)")
 
 
     # process arguments #
@@ -307,3 +424,7 @@ if __name__ == '__main__':
     # Red noise leak; Expontiation#
     elif args.psd_6:
         psd_6()
+
+    # Red noise leak; different noise levels (means)#
+    elif args.psd_7:
+        psd_7()
