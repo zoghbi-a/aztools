@@ -629,9 +629,10 @@ class LCurve(object):
 
 
         # fft; remove the 0-freq and the nyquist #
+        # normalize fft by 2dt/n in case we have segments with different lengths
         freq = [np.fft.rfftfreq(len(r), dt)[1:-1] for r in rate]
-        rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in rate]
-        Rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in Rate]
+        rfft = [np.sqrt(2*dt/len(r)) * np.fft.rfft(r)[1:-1]*taper_factor for r in rate]
+        Rfft = [np.sqrt(2*dt/len(r)) * np.fft.rfft(r)[1:-1]*taper_factor for r in Rate]
         crss = [R*np.conj(r) for r,R in zip(rfft, Rfft)]
         rpsd = [np.abs(r)**2 for r in rfft]
         Rpsd = [np.abs(r)**2 for r in Rfft]
@@ -640,8 +641,10 @@ class LCurve(object):
 
         # noise level in psd. See comments in @calculate_psd #
         fnyq = 0.5/dt
-        nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, rerr)]
-        Nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, Rerr)]
+        #nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, rerr)]
+        #Nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, Rerr)]
+        nois = [ff*0+np.mean(re**2)/fnyq for ff,re in zip(freq, rerr)]
+        Nois = [ff*0+np.mean(re**2)/fnyq for ff,re in zip(freq, Rerr)]
 
 
         # flattern lists #
