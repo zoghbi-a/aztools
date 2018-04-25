@@ -575,6 +575,9 @@ class LCurve(object):
             taper: apply Hanning tapering before calculating the fft
                 see p388 Bendat & Piersol; the fft need to be multiplied
                 by sqrt(8/3) to componsate for the reduced variance.
+            logavg: average psd in log-space and correct bias. For cross
+                spectrum, apply a simple correction to the amplitude
+
                 
         
         Return:
@@ -667,7 +670,7 @@ class LCurve(object):
 
 
         meanf  = lambda a: np.mean(a)
-        lmeanf = lambda a: np.exp(np.mean(np.log(a)))
+        lmeanf = lambda a: 10**(np.mean(np.log10(a)))
 
         f  = _a([lmeanf(freq[i]) for i in idx])
         p  = _a([meanf(rpsd[i])  for i in idx])
@@ -675,6 +678,16 @@ class LCurve(object):
         n  = _a([meanf(nois[i])  for i in idx])
         N  = _a([meanf(Nois[i])  for i in idx])
         c  = _a([meanf(crss[i])  for i in idx])
+
+
+        # logavg? #
+        logavg = kwargs.get('logavg', False)
+        if logavg:
+            p0, P0 = np.array(p), np.array(P)
+            p  = _a([lmeanf(rpsd[i]) * (10**0.251) for i in idx])
+            P  = _a([lmeanf(Rpsd[i]) * (10**0.251) for i in idx])
+            c  = 0.5*(p/p0 + P/P0) * np.abs(c) * np.exp(1j*np.angle(c))
+
 
         # phase lag and its error #
         # g2 is caluclated without noise subtraciton
