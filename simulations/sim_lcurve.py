@@ -371,6 +371,237 @@ def psd_7():
     plt.plot(sim.normalized_psd[0,1:], sim.normalized_psd[1,1:], lw=0.5)
     plt.savefig('png/psd_7.png')
 
+###################
+
+def lag_1():
+    """Simple powerlaw psd, no noise, no binning, no bias correction
+    constant time lag
+    """
+    n    = 512
+    dt   = 1.0
+    mu   = 100.0
+    lag  = 30
+    nsim = 200
+
+    sim = az.SimLC(seed=4632184)
+    sim.add_model('broken_powerlaw', [1e-5, -1, -2, 1e-3])
+    sim.add_model('constant', lag, lag=True)
+
+    lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n, dt, mu, norm='rms')
+        sim.apply_lag()
+        lag.append(az.LCurve.calculate_lag(sim.y, sim.x, dt))
+    
+    lag = np.array(lag)
+    fq  = lag[0,0]
+    l   = lag[:,1].mean(0)
+    le  = lag[:,1].std(0) 
+
+
+    plt.rcParams['figure.figsize'] = [4, 6]
+    plt.rcParams['font.size'] = 7
+
+    plt.errorbar(fq, l, le, fmt='o')
+    plt.xscale('log')
+    plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:])
+    plt.savefig('png/lag_1.png')
+
+
+def lag_2():
+    """Simple powerlaw psd, no noise, no binning, with RED NOISE LEAK.
+    constant time lag; 
+    """
+    n     = 512
+    dt    = 1.0
+    mu    = 100.0
+    phase = False
+    lag   = 1 if phase else 30
+    nsim  = 200
+
+    sim = az.SimLC(seed=4632184)
+    sim.add_model('broken_powerlaw', [1e-5, -1, -2, 1e-3])
+    sim.add_model('constant', lag, lag=True)
+
+    lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='rms')
+        sim.apply_lag(phase)
+        l = [az.LCurve.calculate_lag(sim.y[:n], sim.x[:n], dt, phase=phase)]
+        l.append(az.LCurve.calculate_lag(sim.y[:n], sim.x[:n], dt, taper=True, phase=phase))
+        lag.append(l)
+    
+    lag = np.array(lag)
+    fq  = lag[0,0,0]
+    l1  = lag[:,0,1].mean(0)
+    l1e = lag[:,0,1].std(0) 
+    l2  = lag[:,1,1].mean(0)
+    l2e = lag[:,1,1].std(0) 
+
+    plt.rcParams['figure.figsize'] = [4, 6]
+    plt.rcParams['font.size'] = 7
+
+    plt.fill_between(fq, l1-l1e, l1+l1e, alpha=0.3)
+    plt.fill_between(fq, l2-l2e, l2+l2e, alpha=0.3)
+    plt.xscale('log')
+    plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+    plt.savefig('png/lag_2.png')
+
+
+def lag_3():
+    """Simple powerlaw psd, no noise, with BINNING, RED NOISE LEAK.
+    constant time lag/or phase lag; 
+
+    Without tapering: the noise is always underestimated
+    With tapering, for binning of 5 frequencies per bin and higher,
+        the errors are overestimated
+    The lowest bin is always small when using a constant lag. It is
+        ok when fitting for phases. It seems to be related to how
+        we define the central frequncy of the bin.
+    """
+    n     = 2048
+    dt    = 1.0
+    mu    = 100.0
+    phase = True
+    lag   = 1 if phase else 5
+    nsim  = 100
+    bins  = [1, 2, 5, 10, 20, 40]
+
+    sim = az.SimLC(seed=42184)
+    sim.add_model('broken_powerlaw', [1e-5, -1, -2, 1e-3])
+    sim.add_model('constant', lag, lag=True)
+
+    Lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='rms')
+        sim.apply_lag(phase)
+        x,y = sim.x[:n], sim.y[:n]
+
+        l = []
+        for b in bins:
+            l.append(az.LCurve.calculate_lag(y, x, dt, fqbin={'by_n':[b,1]}, 
+                    phase=phase, rerr=[np.zeros(n)], Rerr=[np.zeros(n)]))
+            l.append(az.LCurve.calculate_lag(y, x, dt, fqbin={'by_n':[b,1]}, 
+                    taper=True, phase=phase, rerr=[np.zeros(n)], Rerr=[np.zeros(n)]))
+
+        Lag.append(l)
+    
+    Lag = np.array(Lag)
+
+    plt.rcParams['figure.figsize'] = [12, 5]
+    plt.rcParams['font.size'] = 7
+
+
+    for iplt in range(6):
+    
+        l0  = np.array([list(l[iplt*2][:3]) for l in Lag])
+        l0t = np.array([list(l[iplt*2+1][:3]) for l in Lag])
+
+        ax = plt.subplot(2,6,2*iplt+1)
+        ax.set_xscale('log')
+        if phase: ax.set_ylim([0, 2])
+        l,le,ll = l0[:,1].mean(0), l0[:,1].std(0), l0[:,2].mean(0)
+        plt.errorbar(l0[0,0], l, le, fmt='o', ms=3, alpha=0.3, color='C1')
+        plt.fill_between(l0[0,0], l-ll, l+ll, alpha=0.3, facecolor='C0')
+        plt.title('b{}::{:3.3g}'.format(bins[iplt], (ll/le)[1:-1].mean() ))
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+lag)
+
+        ax = plt.subplot(2,6,2*iplt+2)
+        ax.set_xscale('log')
+        if phase: ax.set_ylim([0, 2])     
+        l,le,ll = l0t[:,1].mean(0), l0t[:,1].std(0), l0t[:,2].mean(0)
+        plt.errorbar(l0[0,0], l, le, fmt='o', ms=3, alpha=0.3, color='C3')
+        plt.fill_between(l0[0,0], l-ll, l+ll, alpha=0.3, color='C2')
+        plt.title('b{}:taper:{:3.3g}'.format(bins[iplt], (ll/le)[1:-1].mean() ))
+
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+lag)
+    plt.tight_layout(pad=0)
+    plt.savefig('png/lag_3.png')
+
+
+def lag_4():
+    """Simple powerlaw psd, no noise, with BINNING, RED NOISE LEAK. POISSON NOISE
+    constant time lag/or phase lag; 
+
+    The errors from Nowak99 seem to be around 2/3 of the errors from the
+        distributions. I don't understand this.
+
+    """
+    n     = 2048
+    dt    = 1.0
+    mu    = 10000.0
+    phase = True
+    lag   = 1 if phase else 5
+    nsim  = 200
+    bins  = [1, 2, 5, 10, 20, 40]
+
+    sim = az.SimLC(seed=42184)
+    sim.add_model('broken_powerlaw', [1e-5, -1, -2, 1e-3])
+    sim.add_model('constant', lag, lag=True)
+
+    Lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='rms')
+        sim.apply_lag(phase)
+        x,y = sim.x[:n], sim.y[:n]
+        x  = np.random.poisson(x)
+        y  = np.random.poisson(y)
+
+        l = []
+        for b in bins:
+            l.append(az.LCurve.calculate_lag(y, x, dt, fqbin={'by_n':[b,1.1]}, 
+                    phase=phase))
+            l.append(az.LCurve.calculate_lag(y, x, dt, fqbin={'by_n':[b,1.1]}, 
+                    taper=True, phase=phase))
+
+        Lag.append(l)
+    
+    Lag = np.array(Lag)
+
+    plt.rcParams['figure.figsize'] = [12, 5]
+    plt.rcParams['font.size'] = 7
+
+
+    for iplt in range(6):
+    
+        l0  = np.array([list(l[iplt*2][:3]) for l in Lag])
+        l0t = np.array([list(l[iplt*2+1][:3]) for l in Lag])
+
+        ax = plt.subplot(2,6,2*iplt+1)
+        ax.set_xscale('log')
+        if phase: ax.set_ylim([0, 2])
+        l,le,ll = l0[:,1].mean(0), l0[:,1].std(0), l0[:,2].mean(0)
+        plt.errorbar(l0[0,0], l, le, fmt='o', ms=3, alpha=0.3, color='C1')
+        plt.fill_between(l0[0,0], l-ll, l+ll, alpha=0.3, facecolor='C0')
+        pp = np.percentile(l0[:,1],[50,16,100-16],0)
+        plt.plot(l0[0,0], pp[1], ':', color='C0', lw=0.5)
+        plt.plot(l0[0,0], pp[2], ':', color='C0', lw=0.5)
+        plt.title('b{}::{:3.3g}'.format(bins[iplt], (ll/le)[1:-1].mean() ))
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+lag)
+
+        ax = plt.subplot(2,6,2*iplt+2)
+        ax.set_xscale('log')
+        if phase: ax.set_ylim([0, 2])     
+        l,le,ll = l0t[:,1].mean(0), l0t[:,1].std(0), l0t[:,2].mean(0)
+        plt.errorbar(l0[0,0], l, le, fmt='o', ms=3, alpha=0.3, color='C3')
+        plt.fill_between(l0[0,0], l-ll, l+ll, alpha=0.3, color='C2')
+        pp = np.percentile(l0t[:,1],[50,16,100-16],0)
+        plt.plot(l0[0,0], pp[1], ':', color='C2', lw=0.5)
+        plt.plot(l0[0,0], pp[2], ':', color='C2', lw=0.5)
+        plt.title('b{}:taper:{:3.3g}'.format(bins[iplt], (ll/le)[1:-1].mean() ))
+
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+lag)
+    plt.tight_layout(pad=0)
+    plt.savefig('png/lag_4.png')
+
 
 if __name__ == '__main__':
     
@@ -395,6 +626,17 @@ if __name__ == '__main__':
             help="BINNING & RED LEAK & Expontiation")
     p.add_argument('--psd_7', action='store_true', default=False,
             help="BINNING & RED LEAK & Differnet noise levels (means)")
+
+
+    p.add_argument('--lag_1', action='store_true', default=False,
+            help="Simple lag simulation. ")
+    p.add_argument('--lag_2', action='store_true', default=False,
+            help="Simple lag simulation. RED NOISE LEAK")
+    p.add_argument('--lag_3', action='store_true', default=False,
+            help="Simple lag simulation. RED NOISE LEAK, BINNING")
+    p.add_argument('--lag_4', action='store_true', default=False,
+            help="Simple lag simulation. RED NOISE LEAK, BINNING, POISSON NOISE")
+
 
 
     # process arguments #
@@ -428,3 +670,21 @@ if __name__ == '__main__':
     # Red noise leak; different noise levels (means)#
     elif args.psd_7:
         psd_7()
+
+    ################
+
+    # simple lag #
+    if args.lag_1:
+        lag_1()
+
+    # simple lag; red noise leak #
+    if args.lag_2:
+        lag_2()
+
+    # simple lag; red noise leak & binning #
+    if args.lag_3:
+        lag_3()
+
+    # simple lag; red noise leak & binning & poisson noise #
+    if args.lag_4:
+        lag_4()

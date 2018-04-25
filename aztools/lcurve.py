@@ -572,6 +572,9 @@ class LCurve(object):
             phase: return phase lag instead of time lag
             mask_coh: mask bins with undefined coherence, setting their
                 value to 0 and error to pi
+            taper: apply Hanning tapering before calculating the fft
+                see p388 Bendat & Piersol; the fft need to be multiplied
+                by sqrt(8/3) to componsate for the reduced variance.
                 
         
         Return:
@@ -611,10 +614,21 @@ class LCurve(object):
             Rerr = [np.sqrt((r+b)/dt) for r,b in zip(Rate, Bgd)]
 
 
+        # tapering ? #
+        taper = kwargs.get('taper', False)
+        taper_factor = 1.0
+        if taper:
+            rate = [(r-r.mean()) * np.hanning(len(r)) + r.mean() for r in rate]
+            Rate = [(r-r.mean()) * np.hanning(len(r)) + r.mean() for r in Rate]
+            rerr = [r * np.hanning(len(r)) for r in rerr]
+            Rerr = [r * np.hanning(len(r)) for r in Rerr]
+            taper_factor = np.sqrt(8/3)
+
+
         # fft; remove the 0-freq and the nyquist #
         freq = [np.fft.rfftfreq(len(r), dt)[1:-1] for r in rate]
-        rfft = [np.fft.rfft(r)[1:-1] for r in rate]
-        Rfft = [np.fft.rfft(r)[1:-1] for r in Rate]
+        rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in rate]
+        Rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in Rate]
         crss = [R*np.conj(r) for r,R in zip(rfft, Rfft)]
         rpsd = [np.abs(r)**2 for r in rfft]
         Rpsd = [np.abs(r)**2 for r in Rfft]
@@ -651,12 +665,16 @@ class LCurve(object):
         fqm = _a([len(i) for i in idx])
         fqL = _a([freq[i].min() for i in idx] + [freq[idx[-1].max()]])
 
-        f  = _a([np.mean(freq[i]) for i in idx])
-        p  = _a([np.mean(rpsd[i]) for i in idx])
-        P  = _a([np.mean(Rpsd[i]) for i in idx])
-        n  = _a([np.mean(nois[i]) for i in idx])
-        N  = _a([np.mean(Nois[i]) for i in idx])
-        c  = _a([np.mean(crss[ii]) for ii in idx])
+
+        meanf  = lambda a: np.mean(a)
+        lmeanf = lambda a: np.exp(np.mean(np.log(a)))
+
+        f  = _a([lmeanf(freq[i]) for i in idx])
+        p  = _a([meanf(rpsd[i])  for i in idx])
+        P  = _a([meanf(Rpsd[i])  for i in idx])
+        n  = _a([meanf(nois[i])  for i in idx])
+        N  = _a([meanf(Nois[i])  for i in idx])
+        c  = _a([meanf(crss[i])  for i in idx])
 
         # phase lag and its error #
         # g2 is caluclated without noise subtraciton
@@ -665,7 +683,7 @@ class LCurve(object):
         # states that the noise shouldn't be subtracted)
         n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
         lag = np.angle(c)
-        g2  = (np.abs(c)**2 - n2) / (p * P)
+        g2  = (np.abs(c)**2) / (p * P)
         dum = (1 - g2) / (2*g2*fqm)
         lag_e = np.sqrt(np.abs(dum))
 
