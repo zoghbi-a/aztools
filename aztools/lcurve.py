@@ -699,7 +699,7 @@ class LCurve(object):
         # states that the noise shouldn't be subtracted)
         n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
         lag = np.angle(c)
-        g2  = (np.abs(c)**2) / (p * P)
+        g2  = (np.abs(c)**2 - n2) / (p * P)
         dum = (1 - g2) / (2*g2*fqm)
         lag_e = np.sqrt(np.abs(dum))
 
@@ -736,7 +736,7 @@ class LCurve(object):
 
 
         # return #
-        desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 'coh': [coh, coh_e]}
+        desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 'limit_avg':(limit+Limit)/2, 'coh': [coh, coh_e]}
 
         return f, lag, lag_e, desc
 
