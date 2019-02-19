@@ -431,6 +431,7 @@ class LCurve(object):
         if not isinstance(bgd, (np.ndarray, list)):
             bgd = [bgd for r in rate]
         if rerr is None:
+            # err is sqrt of number of counts/bin
             rerr = [np.sqrt((r+b)/dt) for r,b in zip(rate, bgd)]
 
 
@@ -455,7 +456,7 @@ class LCurve(object):
             rpsd = [r * 8/3 for r in rpsd]
 
         ## ------ noise level ------- ##
-        # noise level is: 2*(mu+bgd)/(mu^2) for RMS normalization
+        # noise level is: 2*(mu+bgd)/(mu^2) for RMS normalization; eqn A2, Vaughan+03
         # This the special case of poisson noise light curves.
         # Generally: noise = <e^2>/(mu^2 fq_nyq)
         # where <e^2> is the averaged squared error in the measurements
@@ -499,14 +500,12 @@ class LCurve(object):
 
         """
 
-        import scipy.special as sp
-
 
         # ensure the arrays are compatible #
         if len(freq) != len(rpsd):
             raise ValueError('freq and rpsd are not compatible')
 
-        if noise is None: noise = np.zeros_like(freq)
+        if noise is None: noise = np.zeros_like(freq) + 1e-10
 
         # group the freq array #
         nfq = len(freq)
@@ -536,11 +535,10 @@ class LCurve(object):
         # 1- Whenever logavg=True is used, bias correciton needs
         #    to be applied. Logavg=True does better, most of the
         #    times, particularly when averaging neighboring frequencies
-        # 2- Red noise leak is important, correct it on case
-        #    by case.
         # bias function: bias_f(2) ~ 0.253 in Papadakis93
         # bias_f = lambda k: -sp.digamma(k/2.)/np.log(10)
         #####################################
+        import scipy.special as sp
         bias_f = lambda k: -sp.digamma(k/2.)/np.log(10)
         bias = np.zeros_like(psd) + bias_f(2)
         if logavg: psd *= 10**bias
