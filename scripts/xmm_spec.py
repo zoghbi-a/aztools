@@ -34,7 +34,7 @@ def check_pileup(event, regions):
     # ------------ #
     # run epatplot #
     cmd = ('epatplot set={0}.pu.filtered plotfile={0}.pu.gif '
-           'device=/GIF pileupnumberenergyrange="2000 10000"').format(root)
+           'device=/GIF pileupnumberenergyrange="500 2000"').format(root)
     run_cmd(cmd)
     os.system('rm pgplot* &> /dev/null')
     # ------------ #

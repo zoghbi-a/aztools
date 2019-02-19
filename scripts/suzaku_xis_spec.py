@@ -5,6 +5,7 @@ import numpy as np
 import subprocess
 import argparse
 import glob
+import time
 import os
 from astropy.io import fits as pyfits
 from IPython import embed
@@ -37,11 +38,19 @@ if __name__ == '__main__':
             help="the root directory that contains event_cl")
     p.add_argument("--create_region", action='store_true', default=False,
             help="Create new region files")
+    p.add_argument("--t_expr", metavar='t_expr', type=str, default='',
+            help="Time selection expression so in xselect we have; filter time {t_expr}")
+    p.add_argument("--noclean", action='store_true', default=False,
+            help="Don't clear files; useful when running script multiple times in same dir")
     args = p.parse_args()
 
     # ----------- #
     # parse input #
     out = args.out
+    t_expr = args.t_expr
+    if t_expr != '':
+        t_expr = '\nfilter time %s\n'%t_expr
+    noclean = args.noclean
     # ----------- #
 
 
@@ -84,17 +93,18 @@ if __name__ == '__main__':
 
     # ------------------------------------------ #
     # Extract the spectra from xi0, xi1, and xi3 #
+    irand = np.random.randint(1000, 100000)
     for pat in ['xi0', 'xi1', 'xi3']:
-        
         # add pat output name #
         orig = out.split('_')
         orig.insert(-1, pat)
         suff = '_'.join(orig)
 
         os.system('rm %s* >& /dev/null'%suff)
-        xsel = ('tmp_%s\n'%pat + 
+        xsel = ('tmp_%s_%d\n'%(pat, irand) + 
                 '\n'.join(['read event {} {}'.format(e, idir) for e in evnt if pat in e]) + 
                 '\nfilter region src.reg' + 
+                t_expr + 
                 '\nextract spec\nsave spec %s.src group=no resp=no'%suff + 
                 '\nclear region\nfilter region bgd.reg' + 
                 '\nextract spec\nsave spec %s.bgd group=no resp=no'%suff + 
@@ -121,7 +131,9 @@ if __name__ == '__main__':
 
         run_cmd('ogrppha.py {0}.grp {0}.grp.g -s 6 -f 3'.format(suff))
         run_cmd('mv {0}.grp.g {0}.grp'.format(suff))
-        os.system('rm xselect.log spec_*orig chanfile.txt energyfile.txt tmp* >& /dev/null')
+        if not noclean:
+            os.system('rm xselect.log spec_*orig chanfile.txt energyfile.txt tmp* >& /dev/null')
+
 
 
     # ------------------------------------------ #

@@ -93,7 +93,7 @@ if __name__ == '__main__':
             'save image tmp.img\nexit\nno\n').format(evnt)
         proc = subprocess.Popen("xselect", stdout=subprocess.PIPE, 
                     stdin=subprocess.PIPE)
-        proc.communicate(xsel)
+        proc.communicate(xsel.encode())
         proc.wait()
         run_cmd('ds9 tmp.img -log -zoom 2 -cmap heat')
         run_cmd('rm tmp.* xselect.log &> /dev/null')

@@ -40,12 +40,15 @@ if __name__ == '__main__':
             help="Extra filtering expression. e.g. &&(PI>4000)")
     p.add_argument("--e_args", metavar="e_args", type=str, default='',
             help="Extra arguments for evselect.")
+    p.add_argument("--stdR", metavar="stdR", type=float, default=-1,
+            help="Rate to use when using --std if one other than standard is needed.")
     p.add_argument("--raw", action='store_true', default=False,
             help="region is in RAWX, RAWY instead of X, Y")
     
     args = p.parse_args()
     event = args.event_file
     instr = args.instr
+    stdR = args.stdR
     if instr not in ['pn', 'm1', 'm2']:
         raise ValueError('instr need to be one of pn|m1|m2')
 
@@ -71,9 +74,11 @@ if __name__ == '__main__':
     # background flare filtering #
     filter_options = {
         'pn': ['IN [10000:12000]', '#XMMEA_EP', 
-                '(PI IN [200:12000])&&(PATTERN<=4 )&&(FLAG==0)', 0.4],
+                '(PI IN [200:12000])&&(PATTERN<=4 )&&(FLAG==0)', 
+                0.4 if stdR<0 else stdR],
         'm1': ['> 10000'         , '#XMMEA_EM', 
-                '(PI IN [200:12000])&&(PATTERN<=12)&&(FLAG==0)', 0.35]
+                '(PI IN [200:12000])&&(PATTERN<=12)&&(FLAG==0)', 
+                0.35 if stdR<0 else stdR]
     }
     filter_options['m2'] = filter_options['m1']
 

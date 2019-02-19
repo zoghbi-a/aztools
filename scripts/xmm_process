@@ -20,16 +20,16 @@ case $mode in
             #epchain exposure=2 runbackground=N keepintermediate=raw withoutoftime=Y
             #epchain exposure=2 runatthkgen=N runepframes=N runbadpixfind=N runbadpix=N
             epchain
-            mv *EVL* pn.fits;rm P*
+            #mv *EVL* pn.fits;rm P*
             ;;
     "pn_timing" )
             epchain datamode=TIMING
-            mv *EVL* pn.fits; rm P*
+            #mv *EVL* pn.fits; rm P*
             ;;
     "mos" )
             #emchain exposures=2
             emchain
-            mv *M1*EVL* m1.fits; mv *M2*EVL* m2.fits;rm P*
+            #mv *M1*EVL* m1.fits; mv *M2*EVL* m2.fits;rm P*
             ;;
     "rgs" )
             rgsproc orders='1 2' bkgcorrect=no withmlambdacolumn=yes

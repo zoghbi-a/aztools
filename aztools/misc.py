@@ -327,7 +327,8 @@ def write_pha_spec(b1, b2 ,arr ,err ,stem):
             arr[i]*de[i], err[i]*de[i]) for i in range(len(b1))]) + '\n'
     with open('{}.xsp'.format(stem), 'w') as fp: fp.write(txt)
 
-    cmd = 'flx2xsp {0}.xsp {0}.pha {0}.rsp'.format(stem)
+    cmd = 'export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
+    cmd += 'flx2xsp {0}.xsp {0}.pha {0}.rsp'.format(stem)
     os.system(cmd)
     print('{}.pha was created successfully'.format(stem))
 

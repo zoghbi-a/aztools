@@ -64,7 +64,10 @@ if __name__ == '__main__':
     with pyfits.open(spec_file) as fp:
         src_c  = np.array(fp['SPECTRUM'].data.field(1), np.double)
         src_ex = fp['SPECTRUM'].header['EXPOSURE'] 
-        src_bs = fp['SPECTRUM'].header['BACKSCAL'] 
+        try:
+            src_bs = fp['SPECTRUM'].header['BACKSCAL'] 
+        except:
+            src_bs = 1.0
         try:
             rsp_file = fp['SPECTRUM'].header['RESPFILE']
         except:
@@ -72,7 +75,8 @@ if __name__ == '__main__':
         try:
             bgd_file = fp['SPECTRUM'].header['BACKFILE']
         except:
-            raise ValueError('No BACKFILE key in spectrum header; Set to none if needed')
+            bgd_file = None
+            #raise ValueError('No BACKFILE key in spectrum header; Set to none if needed')
     # ------------------------------------------- #
 
 
@@ -84,7 +88,10 @@ if __name__ == '__main__':
         with pyfits.open(bgd_file) as fp:
             bgd_c  = np.array(fp['SPECTRUM'].data.field(1), np.double)
             bgd_ex = fp['SPECTRUM'].header['EXPOSURE'] 
-            bgd_bs = fp['SPECTRUM'].header['BACKSCAL'] 
+            try:
+                bgd_bs = fp['SPECTRUM'].header['BACKSCAL'] 
+            except:
+                bgd_bs = 1.0
         bgd_c *= (src_bs/bgd_bs) * (src_ex/bgd_ex)
     # --------------------- #
 

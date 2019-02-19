@@ -16,7 +16,7 @@ class SimLC(object):
 
         # built-in models #
         self.builtin_models = ['powerlaw', 'broken_powerlaw', 'bending_powerlaw',
-                                'step', 'constant', 'lorentz']
+                                'step', 'constant', 'lorentz', 'user_array']
 
 
         # model containers #
@@ -310,6 +310,22 @@ class SimLC(object):
             xn = np.random.randn(len(x)) * norm + x
         return xn
 
+    
+    @staticmethod
+    def user_array(freq, params):
+        """The model is given by the user directly as an array params
+
+        Parameters:
+            freq (np.ndarray): the frequency array
+            params (np.ndarray): the model values
+
+        Returns:
+            array mod of same length as freq, containing the psd/lag model
+        """
+
+        if len(params) != len(freq):
+            raise ValueError('params does not match freq: %d vs %d'%(len(params), len(freq)))
+        return np.array(params)
 
 
     @staticmethod

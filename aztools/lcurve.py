@@ -70,7 +70,7 @@ class LCurve(object):
             return self
 
         # make sure time axis can be made even #
-        itime = (self.time - self.time[0]) / self.dt
+        itime = np.round((self.time - self.time[0]) / self.dt)
         if not np.allclose(itime - np.array(itime, np.int), 0):
             raise ValueError('time axis cannot be made even')
 
@@ -516,18 +516,19 @@ class LCurve(object):
 
 
         # do the actual binning #
+        # the noise is logavg if needed, without bias correction
         if logavg:
             f  = [10**np.mean(np.log10(freq[i])) for i in idx]
             p  = [10**np.mean(np.log10(rpsd[i])) for i in idx]
+            n  = [10**np.mean(np.log10(noise[i])) for i in idx]
             pe = [np.log(10)*p[i]*(0.310/fqm[i])**0.5 for i in range(len(p))]
         else:
             f  = [np.mean(freq[i]) for i in idx]
             p  = [np.mean(rpsd[i]) for i in idx]
+            n  = [np.mean(noise[i]) for i in idx]
             pe = [p[i]*(1./fqm[i])**0.5 for i in range(len(p))]
 
-        # noise; alway nolog #
-        n = np.array([np.mean(noise[i]) for i in idx])
-        fq, psd, psde = np.array(f), np.array(p), np.array(pe)
+        fq, psd, psde, n = np.array(f), np.array(p), np.array(pe), np.array(n)
 
         # bias correction #
         #####################################
@@ -570,13 +571,18 @@ class LCurve(object):
             Bgd: array or list of background rates for the reference. 
                 In this case, Rate above is assumed background subtracted.
             phase: return phase lag instead of time lag
-            mask_coh: mask bins with undefined coherence, setting their
-                value to 0 and error to pi
+            mask_coh: mask bins with undefined coherence by setting their
+                error to pi/2; Default=true
             taper: apply Hanning tapering before calculating the fft
                 see p388 Bendat & Piersol; the fft need to be multiplied
-                by sqrt(8/3) to componsate for the reduced variance.
+                by sqrt(8/3) to componsate for the reduced variance. Default: False
             logavg: average psd in log-space and correct bias. For cross
-                spectrum, apply a simple correction to the amplitude
+                spectrum, apply a simple correction to the amplitude. Default: False
+            fit_psd: fit the psd with powerlaw+const to estimate the noise level prperly.
+                if True, ignores rerr/Rerr, this will also calculate limit_psd, which the 
+                noise limit of the lag given the noise estimate from the fitting
+            norm: none|var|rms|leahy. Default: var to account for possible different
+                lengths of the segments
 
                 
         
@@ -586,7 +592,11 @@ class LCurve(object):
         """
 
         phase = kwargs.get('phase', False)
-        mask_coh = kwargs.get('mask_coh', False)
+        mask_coh = kwargs.get('mask_coh', True)
+        norm  = kwargs.get('norm', 'var')
+        
+        if not norm in ['var', 'rms', 'leahy', 'none']:
+            raise ValueError('norm need to be none|var|rms|leahy')
 
 
         # check input #
@@ -606,6 +616,7 @@ class LCurve(object):
         if not isinstance(bgd, (np.ndarray, list)):
             bgd = [bgd for r in rate]
         if rerr is None:
+            # TODO: this is not fully correct!
             rerr = [np.sqrt((r+b)/dt) for r,b in zip(rate, bgd)]
 
         # also Rerr and Bgd for the reference lc #
@@ -614,6 +625,7 @@ class LCurve(object):
         if not isinstance(Bgd, (np.ndarray, list)):
             Bgd = [Bgd for r in Rate]
         if Rerr is None:
+            # TODO: this is not fully correct!
             Rerr = [np.sqrt((r+b)/dt) for r,b in zip(Rate, Bgd)]
 
 
@@ -623,16 +635,20 @@ class LCurve(object):
         if taper:
             rate = [(r-r.mean()) * np.hanning(len(r)) + r.mean() for r in rate]
             Rate = [(r-r.mean()) * np.hanning(len(r)) + r.mean() for r in Rate]
-            rerr = [r * np.hanning(len(r)) for r in rerr]
-            Rerr = [r * np.hanning(len(r)) for r in Rerr]
             taper_factor = np.sqrt(8/3)
 
-
+        
         # fft; remove the 0-freq and the nyquist #
-        # normalize fft by 2dt/n in case we have segments with different lengths
+        expo = {'var':0, 'leahy':1, 'rms':2} 
+        if norm == 'none':
+            rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in rate]
+            Rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in Rate]
+        else:
+            rfft = [np.sqrt(2*dt/(len(r)*r.mean()**expo[norm])) * 
+                        np.fft.rfft(r)[1:-1]*taper_factor for r in rate]
+            Rfft = [np.sqrt(2*dt/(len(r)*r.mean()**expo[norm])) * 
+                        np.fft.rfft(r)[1:-1]*taper_factor for r in Rate]
         freq = [np.fft.rfftfreq(len(r), dt)[1:-1] for r in rate]
-        rfft = [np.sqrt(2*dt/len(r)) * np.fft.rfft(r)[1:-1]*taper_factor for r in rate]
-        Rfft = [np.sqrt(2*dt/len(r)) * np.fft.rfft(r)[1:-1]*taper_factor for r in Rate]
         crss = [R*np.conj(r) for r,R in zip(rfft, Rfft)]
         rpsd = [np.abs(r)**2 for r in rfft]
         Rpsd = [np.abs(r)**2 for r in Rfft]
@@ -640,11 +656,14 @@ class LCurve(object):
 
 
         # noise level in psd. See comments in @calculate_psd #
+        # noise level is: <e^2>/(mu^2 fq_nyq) for rms norm; then renorm accordingly
         fnyq = 0.5/dt
-        #nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, rerr)]
-        #Nois = [ff*0+np.mean(re**2)*len(re)/(fnyq*2*dt) for ff,re in zip(freq, Rerr)]
-        nois = [ff*0+np.mean(re**2)/fnyq for ff,re in zip(freq, rerr)]
-        Nois = [ff*0+np.mean(re**2)/fnyq for ff,re in zip(freq, Rerr)]
+        if norm == 'none':
+            nois = [ff*0+(np.mean(re**2)*len(re))/(fnyq*2*dt) for ff,re in zip(freq, rerr)]
+            Nois = [ff*0+(np.mean(re**2)*len(re))/(fnyq*2*dt) for ff,re in zip(freq, Rerr)]
+        else:
+            nois = [ff*0+np.mean(re**2)/(fnyq*r.mean()**expo[norm]) for ff,r,re in zip(freq, rate, rerr)]
+            Nois = [ff*0+np.mean(re**2)/(fnyq*r.mean()**expo[norm]) for ff,r,re in zip(freq, Rate, Rerr)]
 
 
         # flattern lists #
@@ -684,12 +703,42 @@ class LCurve(object):
 
 
         # logavg? #
+        # noise is averaged too but without bias correction
+        # this gets the right psd noise
         logavg = kwargs.get('logavg', False)
         if logavg:
             p0, P0 = np.array(p), np.array(P)
             p  = _a([lmeanf(rpsd[i]) * (10**0.251) for i in idx])
             P  = _a([lmeanf(Rpsd[i]) * (10**0.251) for i in idx])
+            n  = _a([lmeanf(nois[i]) for i in idx])
+            N  = _a([lmeanf(Nois[i]) for i in idx])
+            # for c, we need the right normalization
             c  = 0.5*(p/p0 + P/P0) * np.abs(c) * np.exp(1j*np.angle(c))
+            
+        
+        # fit the psd to get the noise? 
+        fit_psd = kwargs.get('fit_psd', False)
+        if fit_psd:
+            from scipy import optimize as opt
+            if logavg:
+                pe = [np.log(10)*p[i]*(0.310/fqm[i])**0.5 for i in range(len(p))]
+                Pe = [np.log(10)*P[i]*(0.310/fqm[i])**0.5 for i in range(len(P))]
+            else:
+                pe = [p[i]*(1./fqm[i])**0.5 for i in range(len(p))]
+                Pe = [P[i]*(1./fqm[i])**0.5 for i in range(len(P))]
+            
+            def pl_fun(x, *p): return (np.exp(p[0]) * x**p[1]) + p[2]
+            # assume gaussian errors
+            try:
+                par, _ = opt.curve_fit(pl_fun, f, p, [-10, -1.5, p[-1]], sigma=pe)
+            except:
+                par = [None, None, np.sum(_a(p)/_a(pe))/np.sum(1/_a(pe))]
+            try:
+                Par, _ = opt.curve_fit(pl_fun, f, P, [-10, -1.5, P[-1]], sigma=Pe)
+            except:
+                Par = [None, None, np.sum(_a(P)/_a(Pe))/np.sum(1/_a(Pe))]
+            n  = f*0 + par[-1]
+            N  = f*0 + Par[-1]
 
 
         # phase lag and its error #
@@ -697,11 +746,17 @@ class LCurve(object):
         # see paragraph after eq. 17 in Nowak+99
         # see eq. 11, 12 in Uttley+14 (is this wrong. Nowak clearly 
         # states that the noise shouldn't be subtracted)
-        n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
         lag = np.angle(c)
+        n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
         g2  = (np.abs(c)**2 - n2) / (p * P)
-        dum = (1 - g2) / (2*g2*fqm)
-        lag_e = np.sqrt(np.abs(dum))
+        # mask out points where coherence is undefined #
+        if mask_coh:
+            g2  = np.clip(g2, 1e-6, 1.0)
+            lag_e = np.sqrt((1 - g2) / (2*g2*fqm))
+            lag_e = np.clip(lag_e, 0, np.pi/2)
+        else:
+            dum = (1 - g2) / (2*g2*fqm)
+            lag_e = np.sqrt(np.abs(dum))
 
 
         # coherence gamma_2 #
@@ -714,17 +769,13 @@ class LCurve(object):
                 (n**2/(p-n)**2) + (N**2/(P-N)**2) + (fqm*dcoh/coh**2))**0.5
         
 
-        # mask out points where coherence is undefined #
-        if mask_coh:
-            idx = (dum<0) | (g2<0)
-            lag_e[dum<0] = np.pi
-            lag[dum<0] = 0.0
-
-
         # limits on lag measurements due to poisson noise #
         # equation 30 in Vaughan+2003 #
-        limit = np.sqrt(np.abs(n/(fqm * g2 * (p-n))))
-        Limit = np.sqrt(np.abs(N/(fqm * g2 * (P-N)))) 
+        limit = np.sqrt(np.abs(n/(fqm * g2 * (p-n*0))))
+        Limit = np.sqrt(np.abs(N/(fqm * g2 * (P-N*0)))) 
+        limit_psd = None
+        if fit_psd and not par[0] is None:
+            limit_psd = np.sqrt(par[2]/np.abs(fqm*g2*np.exp(par[0])*f**par[1]))
 
 
         # do we need time lag instead of phase lag? #
@@ -733,10 +784,14 @@ class LCurve(object):
             lag_e /= (2*np.pi*f)
             limit /= (2*np.pi*f)
             Limit /= (2*np.pi*f)
+            if fit_psd and not limit_psd is None:
+                limit_psd /= (2*np.pi*f)
 
 
         # return #
-        desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 'limit_avg':(limit+Limit)/2, 'coh': [coh, coh_e]}
+        desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 'limit_avg':(limit+Limit)/2, 'coh': [coh, coh_e],
+                'psd': p, 'nois': n, 'Psd': P, 'Nois': N, 'cxd': c, 'n2': n2, 'g2': g2, 'limit_psd':limit_psd,
+                'idx': idx, 'crss': crss,}
 
         return f, lag, lag_e, desc
 
