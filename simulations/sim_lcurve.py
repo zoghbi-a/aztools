@@ -1031,6 +1031,355 @@ def bin_psd__4():
     plt.savefig('png/bin_psd__4.png')
 
 
+#####################
+
+
+def phase__1():
+    """Constant phase lag, no binning, no noise, RED NOISE LEAK
+
+    TEST: phases from segments without noise, i.e with leak
+    SUMMARY:
+        1. taper helps alot! both in the scatter and bias
+    """
+    n    = 2**12
+    dt   = 1.0
+    mu   = 100.0
+    lag  = 0.5
+    nsim = 200
+
+    sim = az.SimLC(seed=463284)
+    sim.add_model('powerlaw', [1e-2, -2.])
+    sim.add_model('constant', lag, lag=True)
+
+    lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='var')
+        sim.apply_lag(phase=True)
+        l1 = az.LCurve.calculate_lag(sim.y[:n], sim.x[:n], dt, phase=True)
+        l2 = az.LCurve.calculate_lag(sim.y[:n], sim.x[:n], dt, phase=True, taper=True)
+        lag.append([l1,l2])
+
+    lag = np.array(lag)
+    fq  = lag[0,0,0]
+    l   = lag[:,:,1].mean(0)
+    lp  = np.percentile(lag[:,:,1],[50,16,100-16], 0)
+
+
+    plt.rcParams['figure.figsize'] = [8, 4]
+    plt.rcParams['font.size'] = 7
+
+    ax = plt.subplot(121)
+    plt.plot(fq, lp[0,0], color='C0'); plt.title('no-taper')
+    plt.fill_between(fq, lp[1,0], lp[2,0], alpha=0.5, color='C1')
+    plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+    ax.set_xscale('log')
+
+    ax = plt.subplot(122)
+    plt.plot(fq, lp[0,1], color='C0'); plt.title('taper')
+    plt.fill_between(fq, lp[1,1], lp[2,1], alpha=0.5, color='C1')
+    plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+    ax.set_xscale('log')
+
+    plt.savefig('png/phase__1.png')
+
+
+def phase__2():
+    """Constant phase lag, no binning, NOISE, RED NOISE LEAK
+
+    TEST: phases from segments (i.e. leak) with noise,
+    SUMMARY:
+        1. again, taper helps alot! The scatter is very small in intermediate frequencies
+            not affected by noise, unlike in no-tpaer case.
+    """
+    n    = 2**12
+    dt   = 1.0
+    mu   = 100.0
+    lag  = 0.5
+    nsim = 200
+
+    sim = az.SimLC(seed=4634)
+    sim.add_model('powerlaw', [1e-2, -2.])
+    sim.add_model('constant', lag, lag=True)
+
+    lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='var')
+        sim.apply_lag(phase=True)
+        scale_fac = 100
+        x  = np.random.poisson(sim.x[:n]*scale_fac)/scale_fac
+        y  = np.random.poisson(sim.y[:n]*scale_fac)/scale_fac
+        l1 = az.LCurve.calculate_lag(y, x, dt, phase=True)
+        l2 = az.LCurve.calculate_lag(y, x, dt, phase=True, taper=True)
+        lag.append([l1,l2])
+
+    lag = np.array(lag)
+    fq  = lag[0,0,0]
+    l   = lag[:,:,1].mean(0)
+    lp  = np.percentile(lag[:,:,1],[50,16,100-16], 0)
+
+
+    plt.rcParams['figure.figsize'] = [8, 4]
+    plt.rcParams['font.size'] = 7
+
+    ax = plt.subplot(121)
+    plt.plot(fq, lp[0,0], color='C0'); plt.title('no-taper')
+    plt.fill_between(fq, lp[1,0], lp[2,0], alpha=0.5, color='C1')
+    plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+    ax.set_xscale('log')
+
+    ax = plt.subplot(122)
+    plt.plot(fq, lp[0,1], color='C0'); plt.title('taper')
+    plt.fill_between(fq, lp[1,1], lp[2,1], alpha=0.5, color='C1')
+    plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+    ax.set_xscale('log')
+
+    plt.savefig('png/phase__2.png')
+
+
+def phase__3():
+    """Constant phase lag, BINNING, NOISE, RED NOISE LEAK
+
+    TEST: leak with binning
+    SUMMARY:
+        1. no-taper is biased.
+        2. taper has less scatter in intermediate frequencies and is not biased.
+    """
+    n    = 2**12
+    dt   = 1.0
+    mu   = 100.0
+    lag  = 0.5
+    nsim = 200
+    bins = [2, 5, 10, 20, 50]
+
+    sim = az.SimLC(seed=463444)
+    sim.add_model('powerlaw', [1e-2, -2.])
+    sim.add_model('constant', lag, lag=True)
+
+    lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='var')
+        sim.apply_lag(phase=True)
+        scale_fac = 100
+        x  = np.random.poisson(sim.x[:n]*scale_fac)/scale_fac
+        y  = np.random.poisson(sim.y[:n]*scale_fac)/scale_fac
+        lb = []
+        for b in bins:
+            l1 = az.LCurve.calculate_lag(y, x, dt, phase=True, fqbin={'by_n':[b, 1]},
+                        rerr=(y/scale_fac)**0.5, Rerr=(x/scale_fac)**0.5)
+            l2 = az.LCurve.calculate_lag(y, x, dt, phase=True, taper=True,
+                fqbin={'by_n':[b, 1]}, rerr=(y/scale_fac)**0.5, Rerr=(x/scale_fac)**0.5)
+            lb.append([l1,l2])
+        lag.append(lb)
+
+
+    plt.rcParams['figure.figsize'] = [14, 10]
+    plt.rcParams['font.size'] = 7
+
+
+    for ib in range(len(bins)):
+        lb = np.array([[m[:3] for m in l[ib]] for l in lag])
+        fq = lb[0,0,0]
+        lp = np.percentile(lb[:,:,1],[50,16,100-16], 0)
+
+
+        ax = plt.subplot(2, len(bins), ib+1)
+        plt.plot(fq, lp[0,0], color='C0', lw=0.5)
+        plt.fill_between(fq, lp[1,0], lp[2,0], alpha=0.5, color='C1')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,1])
+        plt.title('bin: %d, no-taper'%bins[ib])
+
+    
+        ax = plt.subplot(2, len(bins), len(bins)+ib+1)
+        plt.plot(fq, lp[0,1], color='C0', lw=0.5); plt.title('taper')
+        plt.fill_between(fq, lp[1,1], lp[2,1], alpha=0.5, color='C1')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,1])
+
+    plt.savefig('png/phase__3.png')
+
+
+def phase__4():
+    """Constant phase lag, BINNING, NOISE, RED NOISE LEAK
+
+    TEST: error formular, and the psd/noise inside
+    SUMMARY:
+        1. Formula works with taper, and simple ftt (no norms, logavg) using
+            psd and cxd without noise subtraction as in Nowak+99 and not Uttley+14
+        2. Without tapering, the error formula gives large error. Even with tapering,
+            the formula gives a slightly larger errors.
+    """
+    n    = 2**12
+    dt   = 1.0
+    mu   = 100.0
+    lag  = 0.5
+    nsim = 200
+    bins = [2, 5, 10, 20, 50]
+
+    sim = az.SimLC(seed=463104)
+    sim.add_model('powerlaw', [1e-2, -2.])
+    sim.add_model('constant', lag, lag=True)
+
+    lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='var')
+        sim.apply_lag(phase=True)
+        scale_fac = 1000
+        x  = np.random.poisson(sim.x[:n]*scale_fac)/scale_fac
+        y  = np.random.poisson(sim.y[:n]*scale_fac)/scale_fac
+        lb = []
+        for b in bins:
+            l1 = az.LCurve.calculate_lag(y, x, dt, phase=True, fqbin={'by_n':[b, 1]},
+                        rerr=(y/scale_fac)**0.5, Rerr=(x/scale_fac)**0.5)
+            l1 = list(l1[:3]) + [l1[3][k] for k in ['coh', 'coh_e']]
+            l2 = az.LCurve.calculate_lag(y, x, dt, phase=True, taper=True,
+                fqbin={'by_n':[b, 1]}, rerr=(y/scale_fac)**0.5, Rerr=(x/scale_fac)**0.5)
+            l2 = list(l2[:3]) + [l2[3][k] for k in ['coh', 'coh_e']]
+            lb.append([l1,l2])
+        lag.append(lb)
+
+
+    plt.rcParams['figure.figsize'] = [14, 10]
+    plt.rcParams['font.size'] = 7
+
+    for ib in range(len(bins)):
+        lb = np.array([[m for m in l[ib]] for l in lag])
+        fq = lb[0,0,0]
+        lp = np.percentile(lb,[50,16,100-16], 0)
+        le = np.median(lb[:,:,2], 0)
+        he = np.median(lb[:,:,4], 0)
+        
+
+
+        ax = plt.subplot(4, len(bins), ib+1)
+        plt.plot(fq, lp[0,0,1], color='C0', lw=0.5)
+        plt.fill_between(fq, lp[1,0,1], lp[2,0,1], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,0,1]-le[0], lp[0,0,1]+le[0], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,1])
+        plt.title('bin: %d, no-taper'%bins[ib])
+
+
+        ax = plt.subplot(4, len(bins), len(bins)+ib+1)
+        plt.plot(fq, lp[0,0,3], color='C0', lw=0.5)
+        plt.fill_between(fq, lp[1,0,3], lp[2,0,3], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,0,3]-he[0], lp[0,0,3]+he[0], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+1, color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,2])
+
+    
+        ax = plt.subplot(4, len(bins), 2*len(bins)+ib+1)
+        plt.plot(fq, lp[0,1,1], color='C0', lw=0.5); plt.title('taper')
+        plt.fill_between(fq, lp[1,1,1], lp[2,1,1], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,1,1]-le[1], lp[0,1,1]+le[1], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,1])
+
+        ax = plt.subplot(4, len(bins), 3*len(bins)+ib+1)
+        plt.plot(fq, lp[0,1,3], color='C0', lw=0.5)
+        plt.fill_between(fq, lp[1,1,3], lp[2,1,3], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,1,3]-he[1], lp[0,1,3]+he[1], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+1, color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,2])
+
+    plt.savefig('png/phase__4.png')
+
+
+def lag__4():
+    """Similar to phase__4, using lags
+
+    SUMMRY:
+        1. This is generally similar to the phase case, but
+        2. The changing phase and phase wraps can mess things up. It could be
+            worth doing calculations in phase.
+    """
+    n    = 2**14
+    dt   = 1.0
+    mu   = 100.0
+    lag  = 30
+    nsim = 200
+    bins = [2, 10, 50]
+
+    sim = az.SimLC(seed=463104)
+    #sim.add_model('powerlaw', [1e-2, -2.])
+    sim.add_model('broken_powerlaw', [5e-3, -1, -2, 1e-4])
+    sim.add_model('constant', lag, lag=True)
+
+    lag = []
+    for isim in range(nsim):
+        az.misc.print_progress(isim, nsim, isim==nsim-1)
+
+        sim.simulate(n*4, dt, mu, norm='var')
+        sim.apply_lag(phase=False)
+        scale_fac = 1000
+        x  = np.random.poisson(sim.x[:n]*scale_fac)/scale_fac
+        y  = np.random.poisson(sim.y[:n]*scale_fac)/scale_fac
+        lb = []
+        for b in bins:
+            l1 = az.LCurve.calculate_lag(y, x, dt, phase=False, fqbin={'by_n':[b, 1]},
+                        rerr=(y/scale_fac)**0.5, Rerr=(x/scale_fac)**0.5)
+            l1 = list(l1[:3]) + [l1[3][k] for k in ['coh', 'coh_e']]
+            l2 = az.LCurve.calculate_lag(y, x, dt, phase=False, taper=True,
+                fqbin={'by_n':[b, 1]}, rerr=(y/scale_fac)**0.5, Rerr=(x/scale_fac)**0.5)
+            l2 = list(l2[:3]) + [l2[3][k] for k in ['coh', 'coh_e']]
+            lb.append([l1,l2])
+        lag.append(lb)
+
+
+    plt.rcParams['figure.figsize'] = [14, 10]
+    plt.rcParams['font.size'] = 7
+
+    for ib in range(len(bins)):
+        lb = np.array([[m for m in l[ib]] for l in lag])
+        fq = lb[0,0,0]
+        lp = np.percentile(lb,[50,16,100-16], 0)
+        le = np.median(lb[:,:,2], 0)
+        he = np.median(lb[:,:,4], 0)
+        
+
+
+        ax = plt.subplot(4, len(bins), ib+1)
+        plt.plot(fq, lp[0,0,1], color='C0', lw=0.5)
+        plt.fill_between(fq, lp[1,0,1], lp[2,0,1], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,0,1]-le[0], lp[0,0,1]+le[0], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-100,100])
+        plt.title('bin: %d, no-taper'%bins[ib])
+
+
+        ax = plt.subplot(4, len(bins), len(bins)+ib+1)
+        plt.plot(fq, lp[0,0,3], color='C0', lw=0.5)
+        plt.fill_between(fq, lp[1,0,3], lp[2,0,3], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,0,3]-he[0], lp[0,0,3]+he[0], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+1, color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,2])
+
+    
+        ax = plt.subplot(4, len(bins), 2*len(bins)+ib+1)
+        plt.plot(fq, lp[0,1,1], color='C0', lw=0.5); plt.title('taper')
+        plt.fill_between(fq, lp[1,1,1], lp[2,1,1], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,1,1]-le[1], lp[0,1,1]+le[1], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[1,1:], color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-100,100])
+
+        ax = plt.subplot(4, len(bins), 3*len(bins)+ib+1)
+        plt.plot(fq, lp[0,1,3], color='C0', lw=0.5)
+        plt.fill_between(fq, lp[1,1,3], lp[2,1,3], alpha=0.5, color='C1')
+        plt.fill_between(fq, lp[0,1,3]-he[1], lp[0,1,3]+he[1], alpha=0.5, color='C3')
+        plt.plot(sim.normalized_lag[0,1:], sim.normalized_lag[0,1:]*0+1, color='C2')
+        ax.set_xscale('log'); ax.set_ylim([-1,2])
+
+    plt.savefig('png/lag__4.png')
+
+
 
 if __name__ == '__main__':
     
@@ -1084,6 +1433,17 @@ if __name__ == '__main__':
     p.add_argument('--bin_psd__4', action='store_true', default=False,
             help="psd binning. test formula errors")
 
+    p.add_argument('--phase__1', action='store_true', default=False,
+            help="constant phase. leak")
+    p.add_argument('--phase__2', action='store_true', default=False,
+            help="constant phase. leak & noise")
+    p.add_argument('--phase__3', action='store_true', default=False,
+            help="constant phase. leak, noise & binning")
+    p.add_argument('--phase__4', action='store_true', default=False,
+            help="constant phase. error formula")
+
+    p.add_argument('--lag__4', action='store_true', default=False,
+            help="constant lag. error formula, similar to phase__4")
 
 
     # process arguments #
@@ -1162,3 +1522,22 @@ if __name__ == '__main__':
 
     # psd binning; formula error #
     if args.bin_psd__4: bin_psd__4()
+
+
+    ################
+
+    # constant phase; leak #
+    if args.phase__1: phase__1()
+
+    # constant phase; leak & noise #
+    if args.phase__2: phase__2()
+
+    # constant phase; leak, noise & binnings#
+    if args.phase__3: phase__3()
+
+    # constant phase; error formula 
+    if args.phase__4: phase__4()
+
+
+    # constant lag; error formula 
+    if args.lag__4: lag__4()
