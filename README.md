@@ -16,3 +16,17 @@ This contains codes for checking the functionality of the `aztools` package. It 
 
 ## `tests` folder:
 Simple unit tests for the `aztools` packge
+
+
+# Installation
+Copy this to a place where python can find it. This can be done by adding the folder conatinting the `aztools` package to `PYTHONPATH`.
+
+The following python packages are needed to run `aztools`:
+- `numpy`
+- `scipy`
+- `astropy`
+
+To install them using `pip`, if not installed, run: `make init`
+
+# Examples
+The functions are documented individually.
