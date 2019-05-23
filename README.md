@@ -31,5 +31,9 @@ To install them using `pip`, if not installed, run: `make init`
 # Documentation
 The functions are documented individually. They are summarized in the [doc file]
 
+# Examples
+To get started, see some usage examples on [simulating light curves and calculating psd].
+
 
 [doc file]: https://github.com/abduzoghbi/aztools/blob/master/docs.md
+[simulating light curves and calculating psd]: https://github.com/abduzoghbi/aztools/blob/master/examples/example1.md
