@@ -28,5 +28,8 @@ The following python packages are needed to run `aztools`:
 
 To install them using `pip`, if not installed, run: `make init`
 
-# Examples
-The functions are documented individually.
+# Documentation
+The functions are documented individually. They are summarized in the [doc file]
+
+
+[doc file]: https://github.com/abduzoghbi/aztools/blob/master/docs.md
