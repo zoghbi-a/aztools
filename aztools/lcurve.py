@@ -679,9 +679,10 @@ class LCurve(object):
         # phase lag and its error #
         # g2 is caluclated without noise subtraciton
         # see paragraph after eq. 17 in Nowak+99
-        # see eq. 11, 12 in Uttley+14 (is this wrong. Nowak clearly 
+        # see eq. 11, 12 in Uttley+14. Nowak (and Uttley too) clearly 
         # states that the noise shouldn't be subtracted)
         lag = np.angle(c)
+        n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
         g2  = (np.abs(c)**2) / (p * P)
 
         # mask out points where coherence is undefined #
@@ -692,7 +693,6 @@ class LCurve(object):
         # coherence gamma_2 #
         # here we subtract the noise; see eq. 8
         # in Vaughan+97 and related definitions
-        n2  = ((p - n)*N + (P - N)*n + n*N) / fqm
         coh   = (np.abs(c)**2 - n2) / ((p-n) * (P-N))
         coh = np.clip(coh, 1e-5, 1-1e-5)
         dcoh  = (2/fqm)**0.5 * (1 - coh)/np.sqrt(coh)
@@ -718,7 +718,8 @@ class LCurve(object):
         desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 
                 'limit_avg':(limit+Limit)/2, 'coh': coh, 'coh_e': coh_e,
                 'psd': p, 'nois': n, 'Psd': P, 'Nois': N, 'cxd': c, 'n2': n2, 
-                'g2': g2, 'idx': idx, 'crss': crss}
+                'g2': g2, 'idx': idx, 'crss': crss,
+                'freq':freq, 'rpsd':rpsd, 'Rpsd':Rpsd, 'rnois':nois, 'RNois': Nois}
 
         return f, lag, lag_e, desc
 
