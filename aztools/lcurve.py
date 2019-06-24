@@ -572,6 +572,8 @@ class LCurve(object):
             taper: apply Hanning tapering before calculating the fft
                 see p388 Bendat & Piersol; the fft need to be multiplied
                 by sqrt(8/3) to componsate for the reduced variance. Default: False
+            norm: how to normalize the fft during the calculations. None|rms|leahy|var.
+                Default is None, so the calculations is done with raw numpy fft
 
                 
         
@@ -623,10 +625,21 @@ class LCurve(object):
             Rate = [(r-r.mean()) * np.hanning(len(r)) + r.mean() for r in Rate]
             taper_factor = np.sqrt(8/3)
 
+
+        # normalization ? #
+        norm = kwargs.get('norm', None)
+        if not norm in [None, 'rms', 'leahy', 'var']:
+            raise ValueError('Unknown norm value. It should be None|rms|leahy|var')
+        expo = {'var':0, 'leahy':1, 'rms':2}
+        if norm is None:
+            normf = lambda r: 1.0
+        else:
+            normf = lambda r: (2.*dt / (len(r) * np.mean(r)**expo[norm]))**0.5
+
         
         # fft; remove the 0-freq and the nyquist #
-        rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in rate]
-        Rfft = [np.fft.rfft(r)[1:-1]*taper_factor for r in Rate]
+        rfft = [np.fft.rfft(r)[1:-1]*taper_factor*normf(r) for r in rate]
+        Rfft = [np.fft.rfft(r)[1:-1]*taper_factor*normf(r) for r in Rate]
         freq = [np.fft.rfftfreq(len(r), dt)[1:-1] for r in rate]
         crss = [R*np.conj(r) for r,R in zip(rfft, Rfft)]
         rpsd = [np.abs(r)**2 for r in rfft]
@@ -636,8 +649,10 @@ class LCurve(object):
         # noise level in psd. See comments in @calculate_psd #
         # noise level is: <e^2>/(mu^2 fq_nyq) for rms norm; then renorm accordingly
         fnyq = 0.5/dt
-        nois = [ff*0+(np.mean(re**2)*len(re))/(fnyq*2*dt) for ff,re in zip(freq, rerr)]
-        Nois = [ff*0+(np.mean(re**2)*len(re))/(fnyq*2*dt) for ff,re in zip(freq, Rerr)]
+        nois = [ff*0+(np.mean(re**2)*len(re)*normf(r))/(fnyq*2*dt) 
+                    for ff,re,r in zip(freq, rerr, rate)]
+        Nois = [ff*0+(np.mean(re**2)*len(re)*normf(r))/(fnyq*2*dt) 
+                    for ff,re,r in zip(freq, Rerr, Rate)]
 
 
         # flattern lists #
@@ -698,6 +713,24 @@ class LCurve(object):
         dcoh  = (2/fqm)**0.5 * (1 - coh)/np.sqrt(coh)
         coh_e = coh * (fqm**-0.5) * ((2*n2*n2*fqm)/(np.abs(c)**2 - n2)**2 + 
                 (n**2/(p-n)**2) + (N**2/(P-N)**2) + (fqm*dcoh/coh**2))**0.5
+
+        # rms spectrum from psd; error from eq. 14 in Uttley+14 #
+        # the rms here is in absolute not fractional units
+        dfq  = fqL[1:]-fqL[:-1]
+        mu   = np.mean([np.mean(r) for r in rate])
+        Mu   = np.mean([np.mean(r) for r in Rate])
+        rms  = mu * (dfq * (p - n))**0.5
+        sigx2  = rms**2
+        sigxn2 = dfq * n * mu**2 
+        rmse = ((2*sigx2*sigxn2 + sigxn2**2) / (2*fqm*sigx2) ) **0.5
+
+
+        # covariance: eq. 13, 15 in Uttley+14 #
+        # again in absolute not fractional units #
+        cov  = ( (np.abs(c)**2 - n2) * mu * Mu * dfq / (p-n) )**0.5
+        sigy2 = dfq * (P - N) * Mu**2
+        sigyn2 = dfq * N * Mu**2
+        cove = ((sigyn2*cov**2 + sigy2*sigxn2 + sigxn2*sigyn2) / (2*fqm*sigy2))**0.5
         
 
         # limits on lag measurements due to poisson noise #
@@ -719,7 +752,8 @@ class LCurve(object):
                 'limit_avg':(limit+Limit)/2, 'coh': coh, 'coh_e': coh_e,
                 'psd': p, 'nois': n, 'Psd': P, 'Nois': N, 'cxd': c, 'n2': n2, 
                 'g2': g2, 'idx': idx, 'crss': crss,
-                'freq':freq, 'rpsd':rpsd, 'Rpsd':Rpsd, 'rnois':nois, 'RNois': Nois}
+                'freq':freq, 'rpsd':rpsd, 'Rpsd':Rpsd, 'rnois':nois, 'RNois': Nois,
+                'rms': _a([rms, rmse]), 'cov': _a([cov, cove])}
 
         return f, lag, lag_e, desc
 
