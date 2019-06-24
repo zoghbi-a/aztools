@@ -727,7 +727,7 @@ class LCurve(object):
 
         # covariance: eq. 13, 15 in Uttley+14 #
         # again in absolute not fractional units #
-        cov  = ( (np.abs(c)**2 - n2) * mu * Mu * dfq / (p-n) )**0.5
+        cov  = ( (np.abs(c)**2 - n2) * mu * mu * dfq / (p-n) )**0.5
         sigy2 = dfq * (P - N) * Mu**2
         sigyn2 = dfq * N * Mu**2
         cove = ((sigyn2*cov**2 + sigy2*sigxn2 + sigxn2*sigyn2) / (2*fqm*sigy2))**0.5
