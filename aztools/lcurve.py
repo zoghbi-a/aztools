@@ -649,9 +649,9 @@ class LCurve(object):
         # noise level in psd. See comments in @calculate_psd #
         # noise level is: <e^2>/(mu^2 fq_nyq) for rms norm; then renorm accordingly
         fnyq = 0.5/dt
-        nois = [ff*0+(np.mean(re**2)*len(re)*normf(r))/(fnyq*2*dt) 
+        nois = [ff*0+(np.mean(re**2)*len(re)*normf(r)**2)/(fnyq*2*dt) 
                     for ff,re,r in zip(freq, rerr, rate)]
-        Nois = [ff*0+(np.mean(re**2)*len(re)*normf(r))/(fnyq*2*dt) 
+        Nois = [ff*0+(np.mean(re**2)*len(re)*normf(r)**2)/(fnyq*2*dt) 
                     for ff,re,r in zip(freq, Rerr, Rate)]
 
 
@@ -751,9 +751,9 @@ class LCurve(object):
         desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 
                 'limit_avg':(limit+Limit)/2, 'coh': coh, 'coh_e': coh_e,
                 'psd': p, 'nois': n, 'Psd': P, 'Nois': N, 'cxd': c, 'n2': n2, 
-                'g2': g2, 'idx': idx, 'crss': crss,
-                'freq':freq, 'rpsd':rpsd, 'Rpsd':Rpsd, 'rnois':nois, 'RNois': Nois,
-                'rms': _a([rms, rmse]), 'cov': _a([cov, cove])}
+                'g2': g2, 'idx': idx, 'crss': crss, 'freq': f,
+                'rfreq':freq, 'rpsd':rpsd, 'Rpsd':Rpsd, 'rnois':nois, 'RNois': Nois,
+                'rms': _a([rms, rmse]), 'cov': _a([cov, cove]),}
 
         return f, lag, lag_e, desc
 

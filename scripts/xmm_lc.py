@@ -5,6 +5,7 @@ import numpy as np
 import subprocess
 import argparse
 import os
+import glob
 
 
 def run_cmd(cmd):
@@ -39,6 +40,8 @@ if __name__ == '__main__':
             help="A user gti file to use.")
     p.add_argument("--raw", action='store_true', default=False,
             help="region is in RAWX, RAWY instead of X, Y")
+    p.add_argument("--chans", action='store_true', default=False,
+            help="ebins are give in pha channels; don't run lccorr")
     args = p.parse_args()
 
     # ----------- #
@@ -46,7 +49,10 @@ if __name__ == '__main__':
     tbin = args.tbin
     if tbin<0: tbin = 2**tbin
     dumst = [x for x in np.array(args.ebins.split()) if len(x)>0]
-    ebins = np.array(dumst, np.double) * 1000
+    if args.chans:
+        ebins = np.array(dumst, np.int)
+    else:
+        ebins = np.array(dumst, np.double) * 1000
     nbins = len(ebins)-1
     ebins = [[ebins[i], ebins[i+1]] for i in range(nbins)]
     out = '{}_{:03g}__{{}}'.format(args.out, tbin)
@@ -106,20 +112,33 @@ if __name__ == '__main__':
         smb = out.format('{}.fits'.format(ie+1))
 
         # source #
-        expr = 'PI IN [{}:{}] && {} {}'.format(
-                ebins[ie][0], ebins[ie][1], regions[0], usr_gti)
+        eselect = 'PHA' if args.chans else 'PI'
+        expr = '{} IN [{}:{}] && {} {}'.format(
+                eselect, ebins[ie][0], ebins[ie][1], regions[0], usr_gti)
         cmd = CMD1.format(event, src, expr, tbin)
         run_cmd(cmd)
 
         # background #
-        expr = 'PI IN [{}:{}] && {} {}'.format(
-                ebins[ie][0], ebins[ie][1], regions[1], usr_gti)
+        expr = '{} IN [{}:{}] && {} {}'.format(
+                eselect, ebins[ie][0], ebins[ie][1], regions[1], usr_gti)
         cmd = CMD1.format(event, bgd, expr, tbin)
         run_cmd(cmd)
 
         # correction #
-        cmd = CMD2.format(src, event, smb, bgd)
-        run_cmd(cmd)
+        if args.chans:
+            # get backscale from the spectra in ../../spec
+            import astropy.io.fits as pyfits
+            spec_dir = '../../spec'
+            sfile = glob.glob('%s/spec*pha'%spec_dir)[0]
+            bfile = glob.glob('%s/spec*bgd'%spec_dir)[0]
+            s_backscale = pyfits.open(sfile)['spectrum'].header['backscal']
+            b_backscale = pyfits.open(bfile)['spectrum'].header['backscal']
+            cmd = 'lcmath %s %s %s 1.0 %g addsubr=no'%(src, bgd, smb, s_backscale/b_backscale)
+            run_cmd(cmd)
+        else:
+            cmd = CMD2.format(src, event, smb, bgd)
+            run_cmd(cmd)
+
 
 
     # --------------------------- #
