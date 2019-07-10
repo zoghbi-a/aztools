@@ -312,11 +312,11 @@ class LCurve(object):
 
 
             # apply gti #
-            igti  = np.isfinite(ldata[0])
+            igti  = ldata[0] < 0
             for gstart, gstop in lgti.T:
                 igti = igti | ( (ldata[0] >= (gstart+gti_skip)) & 
                                 (ldata[0] <= (gstop -gti_skip)) )
-            igood = igti & (lfracexp >= min_exp)
+            igood = igti & (lfracexp >= min_exp) & (np.isfinite(ldata[0]))
             ldata = np.vstack([ldata, lfracexp])
             ldata = ldata[:, igood]
 
@@ -749,7 +749,7 @@ class LCurve(object):
 
         # return #
         desc = {'fqL': fqL, 'fqm':fqm, 'limit':limit, 'Limit':Limit, 
-                'limit_avg':(limit+Limit)/2, 'coh': coh, 'coh_e': coh_e,
+                'limit_avg':(limit+Limit)/2, 'coh': _a([coh, coh_e]),
                 'psd': p, 'nois': n, 'Psd': P, 'Nois': N, 'cxd': c, 'n2': n2, 
                 'g2': g2, 'idx': idx, 'crss': crss, 'freq': f,
                 'rfreq':freq, 'rpsd':rpsd, 'Rpsd':Rpsd, 'rnois':nois, 'RNois': Nois,
@@ -758,5 +758,109 @@ class LCurve(object):
         return f, lag, lag_e, desc
 
 
+    @staticmethod
+    def create_segments(Lc, seglen, strict=False, **kwargs):
+        """Split an LCurve or a list of them to segments. 
+        Useful to be used with calculate_psd|lag etc.
 
 
+        Parameters:
+            Lc: an LCurve or a list of them
+            seglen: segment length in seconds.
+            strict: force all segments to have length length. Some data 
+                may be discarded
+
+        Keywords:
+            uneven: The light curves are uneven, so the splitting produces 
+                segments that have the same number of points. Default: False
+            **other arguments to be passed to az.misc.split_array
+
+        Returns:
+            rate, rerr, time, seg_idx
+            seg_idx is the indices used to create the segments.
+
+        """
+        # Keyworkds
+        uneven = kwargs.get('uneven', False)
+
+
+        if not type(Lc) == list:
+            Lc = [lc]
+
+        # assert the same sampling #
+        dt = Lc[0].dt
+        for l in Lc:
+            if dt != l.dt: 
+                raise ValueError('There is a difference in the time sampling between light curves')
+
+        # segments details #
+        iseglen = np.int(seglen/dt)
+
+        # make sure the LCurve objects are evenly sampled #
+        if not uneven:
+            Lc = [l.make_even() for l in Lc]
+
+
+        # split the rate arrays #
+        splt = [misc.split_array(l.rate, iseglen, strict, l.rerr, l.time, **kwargs) 
+                        for l in Lc]
+
+        # flatten the segments into on large list #
+        rate = [i for s in splt for i in s[0]]
+        rerr = [i for s in splt for i in s[2]]
+        time = [i for s in splt for i in s[3]]
+        seg_idx = [s[1] for s in splt]
+        return rate, rerr, time, seg_idx
+
+
+    @staticmethod
+    def prepare_en_segments(rate, rerr, ibin, iref=None, **kwargs):
+        """Create a light curve array at some energy bin(s), and
+            a corresponding reference band if needed.
+
+
+        Parameters:
+            rate: a list or array of rate values with shape: nen, nseg, ...
+            rerr: the errors array corresponding to rate
+            ibin: the bin number of a interest. int or a list of int giving
+                the indices of interest
+            iref: the bin number or a list of bin numbers to create a secondary
+                reference band. The ibin value(s) will be removed from the 
+                reference light curve if ibin_exclude is true (default). 
+                -1 means use all available bins (excluding ibin)
+
+
+        Keywords:
+            ibin_exclude: exclude ibin from iref. Default True
+
+        Returns:
+            rate, rerr, Rate, Rerr 
+            each has dims: (nseg, ...). The first 2 corresponds to summing over ibin
+            and and the last two are for summing over iref (or None if iref=None). Errors
+            are propagated quadratically from the input rerr
+
+        """
+
+        # keywords
+        ibin_exclude = kwargs.get('ibin_exclude', True)
+
+        nen = len(rate)
+
+        # make sure we are dealing with lists #
+        if not isinstance(ibin, list): ibin = [ibin]
+
+        # the rate and error at the bins of interest #
+        r  = np.sum(np.array(rate)[ibin], 0)
+        re = np.sum(np.square(rerr)[ibin], 0)**0.5
+
+        # reference #
+        R, Re = [], []
+        if not iref is None:
+            if not isinstance(iref, list):
+                iref = list(range(nen)) if iref == -1 else [iref]
+            if ibin_exclude:
+                iref = [i for i in iref if not i in ibin]
+            R  = np.sum(np.array(rate)[iref], 0)
+            Re = np.sum(np.square(rerr)[iref], 0)**0.5
+
+        return r, re, R, Re

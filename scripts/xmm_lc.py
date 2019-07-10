@@ -41,7 +41,11 @@ if __name__ == '__main__':
     p.add_argument("--raw", action='store_true', default=False,
             help="region is in RAWX, RAWY instead of X, Y")
     p.add_argument("--chans", action='store_true', default=False,
-            help="ebins are give in pha channels; don't run lccorr")
+            help="ebins are give in pha channels")
+    p.add_argument("--nolccorr", action='store_true', default=False,
+            help="do not run epiclccorr; default: False")
+    p.add_argument("--abscorr", action='store_true', default=False,
+            help="run epiclccorr; default: True")
     args = p.parse_args()
 
     # ----------- #
@@ -60,6 +64,8 @@ if __name__ == '__main__':
     usr_gti = args.gti
     if usr_gti != '':
         usr_gti = '&&gti({},TIME)'.format(usr_gti)
+    nolccorr = args.nolccorr
+    abscorr = 'yes' if args.abscorr else 'no'
     # ----------- #
 
 
@@ -101,7 +107,7 @@ if __name__ == '__main__':
     )
     CMD2 = (
         'epiclccorr srctslist={} eventlist={} outset={} '
-        'withbkgset=yes bkgtslist={} applyabsolutecorrections=no'
+        'withbkgset=yes bkgtslist={} applyabsolutecorrections=%s'%abscorr
     )
 
     for ie in range(nbins):
@@ -125,17 +131,7 @@ if __name__ == '__main__':
         run_cmd(cmd)
 
         # correction #
-        if args.chans:
-            # get backscale from the spectra in ../../spec
-            import astropy.io.fits as pyfits
-            spec_dir = '../../spec'
-            sfile = glob.glob('%s/spec*pha'%spec_dir)[0]
-            bfile = glob.glob('%s/spec*bgd'%spec_dir)[0]
-            s_backscale = pyfits.open(sfile)['spectrum'].header['backscal']
-            b_backscale = pyfits.open(bfile)['spectrum'].header['backscal']
-            cmd = 'lcmath %s %s %s 1.0 %g addsubr=no'%(src, bgd, smb, s_backscale/b_backscale)
-            run_cmd(cmd)
-        else:
+        if not nolccorr:  
             cmd = CMD2.format(src, event, smb, bgd)
             run_cmd(cmd)
 
