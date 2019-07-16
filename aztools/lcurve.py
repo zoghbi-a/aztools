@@ -719,18 +719,25 @@ class LCurve(object):
         dfq  = fqL[1:]-fqL[:-1]
         mu   = np.mean([np.mean(r) for r in rate])
         Mu   = np.mean([np.mean(r) for r in Rate])
-        rms  = mu * (dfq * (p - n))**0.5
+        rms  = mu * (dfq * np.abs(p - n))**0.5
         sigx2  = rms**2
         sigxn2 = dfq * n * mu**2 
         rmse = ((2*sigx2*sigxn2 + sigxn2**2) / (2*fqm*sigx2) ) **0.5
+        ibad = p<n
+        rms[ibad] = 0.0
+        rmse[ibad] = np.max(np.concatenate((rms, rmse)))
 
 
         # covariance: eq. 13, 15 in Uttley+14 #
         # again in absolute not fractional units #
-        cov  = ( (np.abs(c)**2 - n2) * mu * mu * dfq / (p-n) )**0.5
-        sigy2 = dfq * (P - N) * Mu**2
+        cov  = ( (np.abs(c)**2 - n2) * mu * mu * dfq / (P-N) )
+        ibad = (cov < 0) | (P<=N)
+        cov  = np.abs(cov)**0.5
+        sigy2 = dfq * np.abs(P-N) * Mu**2
         sigyn2 = dfq * N * Mu**2
         cove = ((sigyn2*cov**2 + sigy2*sigxn2 + sigxn2*sigyn2) / (2*fqm*sigy2))**0.5
+        cov[ibad] = 0.0
+        cove[ibad] = np.max(np.concatenate((cov, cove)))
         
 
         # limits on lag measurements due to poisson noise #

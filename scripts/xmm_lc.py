@@ -118,14 +118,15 @@ if __name__ == '__main__':
         smb = out.format('{}.fits'.format(ie+1))
 
         # source #
+        # [) means include low, exclude high
         eselect = 'PHA' if args.chans else 'PI'
-        expr = '{} IN [{}:{}] && {} {}'.format(
+        expr = '{} IN [{}:{}) && {} {}'.format(
                 eselect, ebins[ie][0], ebins[ie][1], regions[0], usr_gti)
         cmd = CMD1.format(event, src, expr, tbin)
         run_cmd(cmd)
 
         # background #
-        expr = '{} IN [{}:{}] && {} {}'.format(
+        expr = '{} IN [{}:{}) && {} {}'.format(
                 eselect, ebins[ie][0], ebins[ie][1], regions[1], usr_gti)
         cmd = CMD1.format(event, bgd, expr, tbin)
         run_cmd(cmd)

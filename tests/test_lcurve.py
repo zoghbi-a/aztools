@@ -315,7 +315,7 @@ class LCurveTest(unittest.TestCase):
         sim.add_model('constant', 6, lag=True)
         sim.apply_lag(phase=False)
 
-        p = az.LCurve.calculate_lag(sim.y, sim.x, 1.0, fqbin=None)
+        p = az.LCurve.calculate_lag(sim.y, sim.x, 1.0, fqbin=None, taper=False)
         np.testing.assert_array_almost_equal(sim.normalized_lag[0][1:-1], p[0])
         # do the first 5 before the oscillation kicks in.  
         np.testing.assert_array_almost_equal(np.zeros(5)+6, p[1][:5])

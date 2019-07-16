@@ -4,6 +4,8 @@ import numpy as np
 import os
 from itertools import groupby
 import sys
+import scipy.optimize as opt
+import scipy.stats as st
 
 
 def split_array(arr, length, strict=False, *args, **kwargs):
@@ -73,8 +75,10 @@ def split_array(arr, length, strict=False, *args, **kwargs):
 
 
         # flatten the list #
-        iarr = [j for i in iarr for j in i if 
-                    (not strict and len(j)>=min_seg_length) or len(j)==length]
+        iarr = [j for i in iarr for j in i if not strict or len(j)==length]
+
+    # enforce a minimum segment length #  
+    iarr = [i for i in iarr if len(i)>=min_seg_length]
 
 
     res = [arr[i] for i in iarr]
@@ -353,3 +357,56 @@ def print_progress(step, total, final=False):
         sys.stdout.write('\n\n\n')
         
 
+def simple_fit(xval, yval, yerr, mod, **kwargs):
+    """Fit a simple constant or linear model to some data, and do the null test
+
+    Parameters:
+        xval: values of the independent variable
+        yval: values of the dependent variable
+        yerr: uncertainty in yval
+        mod: a string for a model: 'const' | 'linear'
+
+    Keywords
+        verbose: print progress
+        p0: starting parameters
+
+    Returns:
+
+
+    """
+    verbose = kwargs.get('verbose', True)
+    p0 = kwargs.get('p0', None)
+
+
+    # built-in models #
+    def fcn_1(x, *p) : return x*0 + p[0]
+    def fcn_2(x, *p) : return p[0] + p[1] * x
+    models = {
+        'const':  [1, fcn_1],
+        'linear': [2, fcn_2]
+    }
+
+    if not mod in models.keys():
+        raise ValueError('Unknown model %s'%mod)
+    npar = models[mod][0]
+    fcn  = models[mod][1]
+
+
+    # starting parameters #
+    if p0 is None:
+        p0 = [np.mean(yval)] + ([] if npar==1 else [0.1])
+    assert(len(p0) == npar)
+
+
+    fopt = opt.curve_fit(fcn, xval, yval, p0, sigma=yerr)
+    chi2 = np.sum(((yval - fcn(xval, *fopt[0]))/yerr)**2)
+    pval = 1 - st.chi2.cdf(chi2, df=len(xval)-npar)
+    nsig = -st.norm.ppf(pval/2)
+    p, pe = fopt[0], np.diag(fopt[1])**0.5 
+    text  = '\n# fit({}): chi2({:6.3}) pval({:6.4}) conf({:6.3}) sigma({:6.3})'.format(
+                mod, chi2, pval, 1-pval, nsig)
+    text += '\n# ' + (', '.join(['%6.3g (%6.3g)'%(x,xe) for x,xe in zip(p, pe)])) + '\n'
+    if verbose:
+        print(text)
+
+    return [p, pe], chi2, pval, nsig, text
