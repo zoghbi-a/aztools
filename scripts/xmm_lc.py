@@ -118,16 +118,17 @@ if __name__ == '__main__':
         smb = out.format('{}.fits'.format(ie+1))
 
         # source #
-        # [) means include low, exclude high
-        eselect = 'PHA' if args.chans else 'PI'
-        expr = '{} IN [{}:{}) && {} {}'.format(
-                eselect, ebins[ie][0], ebins[ie][1], regions[0], usr_gti)
+        # [) means include low, exclude high; e assume the channels are the standard
+        # 0:20479::5 -> 4096 channels
+        ch_fact = 5 if args.chans else 1
+        expr = 'PI IN [{}:{}) && {} {}'.format(
+                ebins[ie][0]*ch_fact, ebins[ie][1]*ch_fact, regions[0], usr_gti)
         cmd = CMD1.format(event, src, expr, tbin)
         run_cmd(cmd)
 
         # background #
-        expr = '{} IN [{}:{}) && {} {}'.format(
-                eselect, ebins[ie][0], ebins[ie][1], regions[1], usr_gti)
+        expr = 'PI IN [{}:{}) && {} {}'.format(
+                ebins[ie][0]*ch_fact, ebins[ie][1]*ch_fact, regions[1], usr_gti)
         cmd = CMD1.format(event, bgd, expr, tbin)
         run_cmd(cmd)
 

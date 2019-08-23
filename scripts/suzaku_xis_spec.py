@@ -117,9 +117,18 @@ if __name__ == '__main__':
         proc.wait()
 
         # response #
-        run_cmd('xisresp {}.src medium src.reg'.format(suff))
-        run_cmd('rbnpha {0}.bgd {0}_tmp.bgd binfile=chanfile.txt'.format(suff))
-        run_cmd('mv {0}_tmp.bgd {0}.bgd'.format(suff))
+        # the code in xisresp need to be modified so it doesn't delete chanfile.txt
+        #run_cmd('xisresp {}.src medium src.reg'.format(suff))
+        run_cmd('xisresp {}.src slow src.reg'.format(suff))
+        #run_cmd(('rbnpha {0}.bgd {0}_tmp.bgd binfile=chanfile.txt properr=no '
+        #         'error=POISS-0').format(suff))
+        #run_cmd('mv {0}_tmp.bgd {0}.bgd'.format(suff))
+
+        # there a bug in rbnpha; that does not update DETCHANS, so we do it by hnad
+        #for ext in ['src', 'bgd']:
+        #    with pyfits.open('%s.%s'%(suff, ext)) as fp:
+        #        fp['spectrum'].header['DETCHANS'] = fp['spectrum'].header['naxis2']
+        #        fp.writeto('%s.%s'%(suff, ext), overwrite=True)
 
 
 
