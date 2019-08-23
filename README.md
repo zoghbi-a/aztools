@@ -35,5 +35,5 @@ The functions are documented individually. They are summarized in the [doc file]
 To get started, see some usage examples on [simulating light curves and calculating psd].
 
 
-[doc file]: https://github.com/abduzoghbi/aztools/blob/master/docs.md
-[simulating light curves and calculating psd]: https://github.com/abduzoghbi/aztools/blob/master/examples/example1.md
+[doc file]: docs
+[simulating light curves and calculating psd]: examples/example1
