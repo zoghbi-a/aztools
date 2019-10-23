@@ -397,6 +397,31 @@ class LCurve(object):
 
 
     @staticmethod
+    def read_ni_lcurve(fits_file, **kwargs):
+        """Read nicer lcurve fits_file.
+            This sets values relevant to NICER and calls read_fits_file
+
+        Parameters:
+            fits_file: name of the files file
+
+        Keywords:
+            See @LCurve.read_fits_file
+
+
+        Returns:
+            LCurve object
+        """
+
+        # set values relevant to XMM-PN files #
+        kwargs.setdefault('min_exp' , 0.99)
+        kwargs.setdefault('gti_tbl' , 'GTI')
+        #kwargs.setdefault('gti_skip', 3.0)
+    
+        data, dt = LCurve.read_fits_file(fits_file, **kwargs)
+        return LCurve(data[0], data[1], data[2], dt, data[3]) 
+
+
+    @staticmethod
     def calculate_psd(rate, dt, norm='var', **kwargs):
         """Calculate raw psd from a list of light curves.
         
@@ -792,7 +817,7 @@ class LCurve(object):
 
 
         if not type(Lc) == list:
-            Lc = [lc]
+            Lc = [Lc]
 
         # assert the same sampling #
         dt = Lc[0].dt

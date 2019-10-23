@@ -42,6 +42,8 @@ if __name__ == '__main__':
             help="Time selection expression so in xselect we have; filter time {t_expr}")
     p.add_argument("--noclean", action='store_true', default=False,
             help="Don't clear files; useful when running script multiple times in same dir")
+    p.add_argument("--mode", metavar='mode', default='medium', type=str,
+            help="slow|medium|fast to be passed to xisresp")
     args = p.parse_args()
 
     # ----------- #
@@ -51,6 +53,7 @@ if __name__ == '__main__':
     if t_expr != '':
         t_expr = '\nfilter time %s\n'%t_expr
     noclean = args.noclean
+    mode = args.mode
     # ----------- #
 
 
@@ -118,17 +121,22 @@ if __name__ == '__main__':
 
         # response #
         # the code in xisresp need to be modified so it doesn't delete chanfile.txt
-        #run_cmd('xisresp {}.src medium src.reg'.format(suff))
-        run_cmd('xisresp {}.src slow src.reg'.format(suff))
-        #run_cmd(('rbnpha {0}.bgd {0}_tmp.bgd binfile=chanfile.txt properr=no '
-        #         'error=POISS-0').format(suff))
-        #run_cmd('mv {0}_tmp.bgd {0}.bgd'.format(suff))
+        # and to use ftrbnpha/ftrbnrmf.
+        run_cmd('xisresp {}.src {} src.reg'.format(suff, mode))
+
+        if mode != 'slow':
+            run_cmd('ftrbnpha {0}.bgd outfile={0}_tmp.bgd binfile=chanfile.txt properr=yes'.format(suff))
+            run_cmd('mv {0}_tmp.bgd {0}.bgd'.format(suff))
 
         # there a bug in rbnpha; that does not update DETCHANS, so we do it by hnad
-        #for ext in ['src', 'bgd']:
-        #    with pyfits.open('%s.%s'%(suff, ext)) as fp:
-        #        fp['spectrum'].header['DETCHANS'] = fp['spectrum'].header['naxis2']
-        #        fp.writeto('%s.%s'%(suff, ext), overwrite=True)
+        for ext in ['src', 'bgd']:
+            with pyfits.open('%s.%s'%(suff, ext)) as fp:
+                fp['spectrum'].header['DETCHANS'] = fp['spectrum'].header['naxis2']
+                fp.writeto('%s.%s'%(suff, ext), overwrite=True)
+        # and the response file too
+        with pyfits.open('%s.rsp'%(suff)) as fp:
+                fp['matrix'].header['DETCHANS'] = fp['ebounds'].header['DETCHANS']
+                fp.writeto('%s.rsp'%(suff), overwrite=True)
 
 
 
@@ -142,6 +150,17 @@ if __name__ == '__main__':
         run_cmd('mv {0}.grp.g {0}.grp'.format(suff))
         if not noclean:
             os.system('rm xselect.log spec_*orig chanfile.txt energyfile.txt tmp* >& /dev/null')
+
+    # combine xi0, xi3 to get front-illuminated (fi) spectra
+    files = glob.glob('*xi[0,3]*grp')
+    if len(files) == 2:
+        print('--- combining xi0, xi3 ---')
+        orig = out.split('_')
+        orig.insert(-1, 'fi')
+        suff = '_'.join(orig)
+        with open('tmp.add', 'w') as fp: fp.write('\n'.join(files))
+        run_cmd('addspec tmp.add {} yes yes'.format(suff))
+        run_cmd('ogrppha.py {0}.pha {0}.grp -s 6 -f 3'.format(suff))
 
 
 
