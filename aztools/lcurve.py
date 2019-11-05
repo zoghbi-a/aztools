@@ -768,7 +768,9 @@ class LCurve(object):
         # limits on lag measurements due to poisson noise #
         # equation 30 in Vaughan+2003 #
         limit = np.sqrt(np.abs(n/(fqm * g2 * (p-n))))
-        Limit = np.sqrt(np.abs(N/(fqm * g2 * (P-N)))) 
+        Limit = np.sqrt(np.abs(N/(fqm * g2 * (P-N))))
+        limit = np.clip(limit, -np.pi, np.pi)
+        Limit = np.clip(Limit, -np.pi, np.pi)
 
 
         # do we need time lag instead of phase lag? #
