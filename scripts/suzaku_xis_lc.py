@@ -6,9 +6,8 @@ import subprocess
 import argparse
 import glob
 import os
-import xspec as xs
 from astropy.io import fits as pyfits
-from IPython import embed
+from aztools import data_tools
 
 
 def run_cmd(cmd):
@@ -17,7 +16,7 @@ def run_cmd(cmd):
     print(header)
     ret = subprocess.call(cmd, shell='True')
     if ret != 0:
-       raise SystemExit('\nFailed in the command: ' + header)
+        raise SystemExit('\nFailed in the command: ' + header)
 
 if __name__ == '__main__':
     pass
@@ -83,7 +82,7 @@ if __name__ == '__main__':
 
     # ---------------- #
     # backscale values #
-    backscale = []
+    backscale, src_backscale = [], []
     for pat in ['xi0', 'xi1', 'xi3']:
         sfile = glob.glob('{}/*{}*src'.format(spec_dir, pat))
         bfile = glob.glob('{}/*{}*bgd'.format(spec_dir, pat))
@@ -92,43 +91,35 @@ if __name__ == '__main__':
         src_bs = pyfits.open(sfile[0])[1].header['backscal']
         bgd_bs = pyfits.open(bfile[0])[1].header['backscal']
         backscale.append(src_bs/bgd_bs)
+        src_backscale.append(src_bs)
     # ---------------- #
 
-    # ------------------------------------------------- #
-    # use xspec to get the energy to channel conversion #
-    chans = []
-    for pat in ['xi0', 'xi1', 'xi3']:
-        sfile = glob.glob('{}/*{}*src'.format(spec_dir, pat))
-        run_cmd('cp {}* .'.format(sfile[0][:-3]))
-        xs.AllData.clear()
-        spec = xs.Spectrum(sfile[0].split('/')[-1])
-        ch = []
-        for ie in range(nbins):
-            spec.notice('**')
-            spec.ignore('0.0-{:3.3f}, {:3.3f}-**'.format(ebins[ie], ebins[ie+1]))
-            ch.append([min(spec.noticed), max(spec.noticed)])
-        chans.append(ch)
-        run_cmd('rm {}*'.format(sfile[0].split('/')[-1][:-3]))
-    chans = np.array(chans)
+    # ------------------------------------------------------------- #
+    # use a direct conversion function of energy and channel number #
+    conv  = lambda en:int(np.floor((en*1000)/3.65))
+    chans = np.array([[conv(ebins[i]),conv(ebins[i+1])-1] for i in range(nbins)])
     enegs = [ [ebins[i],ebins[i+1]] for i in range(nbins) ]
     np.savez('energy_{:03g}.npz'.format(tbin), en=enegs, chans=chans)
-    # ------------------------------------------------- #
-
+    # ------------------------------------------------------------- #
 
 
     # ------------------------------------------ #
     # Extract the light curve from xi0, xi1, and xi3 #
     for ie in range(nbins):
+        
+        ch1, ch2 = chans[ie]
+        print('Channels for energy bin %d: %d %d'%(ie+1, ch1, ch2))
+            
         for ipat, pat in enumerate(['xi0', 'xi1', 'xi3']):
 
             # add pat output name #
             suff = out.format(pat, ie+1)
-            ch1, ch2 = chans[ipat, ie]
 
             os.system('rm %s* >& /dev/null'%suff)
             xsel = ('tmp_%s\n'%pat + 
                     '\n'.join(['read event {} {}'.format(e, idir) for e in evnt if pat in e]) + 
-                    '\nfilter PHA_CUTOFF {} {}'.format(ch1, ch2) +
+                    #'\nfilter PHA_CUTOFF {} {}'.format(ch1, ch2) +
+                    '\nfilter COLUMN "PI={}:{}"'.format(ch1, ch2) +
                     '\nfilter region src.reg' + 
                     '\nextract curve bin=%f offset=no\nsave curve %s.src'%(tbin, suff) + 
                     '\nclear region\nfilter region bgd.reg' + 
@@ -142,9 +133,27 @@ if __name__ == '__main__':
             proc.wait()
 
             # subtract background from source #
-            cmd = 'lcmath {0}.src {0}.bgd {0}.lc 1.0 {1} no'.format(
-                    suff, backscale[ipat])
-            run_cmd(cmd)
+            #cmd = 'lcmath {0}.src {0}.bgd {0}.lc 1.0 {1} no'.format(
+            #        suff, backscale[ipat])
+            #run_cmd(cmd)
+            data_tools.lcmath('%s.src'%suff, '%s.bgd'%suff, '%s.lc'%suff, 1.0, -backscale[ipat])
+                
+            
+        # combine xi0 and xi3
+        #cmd = 'lcmath {}.lc {}.lc {}.lc 1.0 {} yes'.format(
+        #            out.format('xi0', ie+1), out.format('xi3', ie+1), out.format('fi', ie+1),
+        #            src_backscale[0]/src_backscale[2])
+        #run_cmd(cmd)
+        data_tools.lcmath('%s.lc'%out.format('xi0', ie+1), '%s.lc'%out.format('xi3', ie+1), 
+               '%s.lc'%out.format('fi', ie+1),  1.0, src_backscale[0]/src_backscale[2])
+        
+        # combine all xi detectors #
+        #cmd = 'lcmath {}.lc {}.lc {}.lc 1.0 {} yes'.format(
+        #            out.format('fi', ie+1), out.format('xi1', ie+1), out.format('all', ie+1),
+        #            src_backscale[0]/src_backscale[1])
+        #run_cmd(cmd)
+        data_tools.lcmath('%s.lc'%out.format('fi', ie+1), '%s.lc'%out.format('xi1', ie+1), 
+               '%s.lc'%out.format('all', ie+1),  1.0, src_backscale[0]/src_backscale[1])
 
     # clear
     os.system('rm xselect.log tmp* &> /dev/null')

@@ -7,6 +7,7 @@ import argparse
 import glob
 import os
 from astropy.io import fits as pyfits
+from aztools import data_tools
 
 
 def run_cmd(cmd, quiet=False):
@@ -15,7 +16,8 @@ def run_cmd(cmd, quiet=False):
     print(header)
     ret = subprocess.call(cmd, shell='True')
     if ret != 0 and not quiet:
-       raise SystemExit('\nFailed in the command: ' + header)
+        raise SystemExit('\nFailed in the command: ' + header)
+
 
 if __name__ == '__main__':
     
@@ -165,8 +167,9 @@ if __name__ == '__main__':
                 bcorr.append(s_backscale/b_backscale)
 
             # subtract background from source #
-            cmd = 'lcmath {0}_sr.lc {0}_bk.lc {0}.lc 1.0 {1} no'.format(
-                        sout, bcorr[ii])
+            #cmd = 'lcmath {0}_sr.lc {0}_bk.lc {0}.lc 1.0 {1} no'.format(
+            #            sout, bcorr[ii])
+            data_tools.lcmath('%s_sr.lc'%sout, '%s_bk.lc'%sout, '%s.lc'%sout, 1.0, -bcorr[ii])
             run_cmd(cmd)
 
             # clean #

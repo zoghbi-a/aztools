@@ -44,8 +44,8 @@ if __name__ == '__main__':
             help="ebins are give in pha channels")
     p.add_argument("--nolccorr", action='store_true', default=False,
             help="do not run epiclccorr; default: False")
-    p.add_argument("--abscorr", action='store_true', default=False,
-            help="run epiclccorr; default: True")
+    p.add_argument("--no-abscorr", action='store_true', default=False,
+            help="do not run absolute corrections in epiclccorr; default: False, i.e run it")
     args = p.parse_args()
 
     # ----------- #
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     if usr_gti != '':
         usr_gti = '&&gti({},TIME)'.format(usr_gti)
     nolccorr = args.nolccorr
-    abscorr = 'yes' if args.abscorr else 'no'
+    abscorr = 'no' if args.no_abscorr else 'yes'
     # ----------- #
 
 

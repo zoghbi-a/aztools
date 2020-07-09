@@ -64,7 +64,7 @@ def split_array(arr, length, strict=False, *args, **kwargs):
         # can we use approximate length? #
         if approx:
             ilength = [length if len(ii)<=length else 
-                        np.int(len(ii)/np.round(len(ii) / length)) for ii in iarr]
+                        np.int(np.round(len(ii)/np.round(len(ii) / length))) for ii in iarr]
         else:
             ilength = [length] * len(iarr)
 
@@ -310,7 +310,7 @@ def spec_2_ebins(spec_file, nbins=1, **kwargs):
     print('Results written to {}'.format(efile + '.log'))
 
 
-def write_pha_spec(b1, b2 ,arr ,err ,stem):
+def write_pha_spec(b1, b2 ,arr ,err ,stem, verbosity=True):
     """Write spectra to pha spectrum format and call 
         flx2xsp to create a pha file
 
@@ -327,14 +327,14 @@ def write_pha_spec(b1, b2 ,arr ,err ,stem):
         raise ValueError('b1, b2, arr, err need to have the same length')
 
     de = b2 - b1
-    txt = '\n'.join(['{} {} {} {}'.format(b1[i], b2[i], 
+    txt = '\n'.join(['{:8.8} {:8.8} {:8.8} {:8.8}'.format(b1[i], b2[i], 
             arr[i]*de[i], err[i]*de[i]) for i in range(len(b1))]) + '\n'
     with open('{}.xsp'.format(stem), 'w') as fp: fp.write(txt)
 
     cmd = 'export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
     cmd += 'flx2xsp {0}.xsp {0}.pha {0}.rsp'.format(stem)
     os.system(cmd)
-    print('{}.pha was created successfully'.format(stem))
+    if verbosity: print('{}.pha was created successfully'.format(stem))
 
 
 def print_progress(step, total, final=False):

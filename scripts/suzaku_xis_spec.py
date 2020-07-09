@@ -17,10 +17,9 @@ def run_cmd(cmd):
     print(header)
     ret = subprocess.call(cmd, shell='True')
     if ret != 0:
-       raise SystemExit('\nFailed in the command: ' + header)
+        raise SystemExit('\nFailed in the command: ' + header)
 
 if __name__ == '__main__':
-    pass
     p   = argparse.ArgumentParser(                                
         description='''
         Extract suzaku xis spectra.
@@ -44,6 +43,8 @@ if __name__ == '__main__':
             help="Don't clear files; useful when running script multiple times in same dir")
     p.add_argument("--mode", metavar='mode', default='medium', type=str,
             help="slow|medium|fast to be passed to xisresp")
+    p.add_argument("--lc", action='store_true', default=False,
+            help="extract spec for use in lc; force fast mode, and do not rebin the spectra/response")
     args = p.parse_args()
 
     # ----------- #
@@ -54,6 +55,7 @@ if __name__ == '__main__':
         t_expr = '\nfilter time %s\n'%t_expr
     noclean = args.noclean
     mode = args.mode
+    islc = args.lc
     # ----------- #
 
 
@@ -141,13 +143,16 @@ if __name__ == '__main__':
 
 
         # grouping #
-        os.system('rm %s.grp >& /dev/null'%suff)
-        cmd = ( 'grppha {0}.src {0}.grp "chkey backfile {0}.bgd&'+
-                'group min 100&exit"')
+        cmd = 'fthedit {0}.src[SPECTRUM] backfile a {0}.bgd'
         run_cmd(cmd.format(suff))
+        cmd = 'fthedit {0}.src[SPECTRUM] respfile a {0}.rsp'
+        run_cmd(cmd.format(suff))
+        
+        #cmd = 'grppha {0}.src {0}.grp "group min 100&exit"'
+        #run_cmd(cmd.format(suff))
 
-        run_cmd('ogrppha.py {0}.grp {0}.grp.g -s 6 -f 3'.format(suff))
-        run_cmd('mv {0}.grp.g {0}.grp'.format(suff))
+        os.system('rm %s.grp >& /dev/null'%suff)
+        run_cmd('ogrppha.py {0}.src {0}.grp -s 6 -f 3'.format(suff))
         if not noclean:
             os.system('rm xselect.log spec_*orig chanfile.txt energyfile.txt tmp* >& /dev/null')
 

@@ -205,7 +205,7 @@ class LCurveTest(unittest.TestCase):
             ])
         hdu.name = 'RATE'
         fname = 'tmp.fits'
-        hdu.writeto(fname, clobber=True)
+        hdu.writeto(fname, overwrite=True)
         lc, _ = az.LCurve.read_fits_file(fname)
         np.testing.assert_array_almost_equal(t,  lc[0])
         np.testing.assert_array_almost_equal(x,  lc[1])

@@ -14,7 +14,7 @@ def run_cmd(cmd):
     print(header)
     ret = subprocess.call(cmd, shell='True')
     if ret != 0:
-       raise SystemExit('\nFailed in the command: ' + header)
+       raise RuntimeError('\nFailed in the command: ' + header)
 
 
 def check_pileup(event, regions):

@@ -222,7 +222,31 @@ class LCurve(object):
         self.rate[iinf] = y[iinf]
         self.rerr[iinf] = ye[iinf]
 
-
+    
+    @staticmethod
+    def sync(lc_list, tbase=None):
+        """Synchronize a list of arrays or LCurve's
+        lc_list: a list of arrays or a list of LCurve objects.
+            if arrays, the shape is (nlc, 3 (or 4 for fexp), nt).
+            The 3 is for (time, rate, rerr)
+        tbase: time array to use for reference. 
+            If not given, use the intersection of all t
+        """
+        if not isinstance(lc_list, (list, np.ndarray)):
+            raise ValueError('lc_list must be a list')
+        if isinstance(lc_list[0], LCurve):
+            data = [np.array([l.time, l.rate, l.rerr]) for l in lc_list]
+        else:
+            # consider if fexp is not given
+            data = [np.array(l) for l in lc_list]
+        
+        if tbase is None:
+            tbase = data[0][0]
+            for d in data[1:]:
+                tbase = tbase[np.in1d(tbase, d[0])]
+        
+        data = [d[:, np.in1d(d[0], tbase)] for d in data]
+        return data
 
 
     @staticmethod
@@ -285,9 +309,10 @@ class LCurve(object):
                         fs[rate_tbl].header.keys() else 0.0)
             dt = (fs[rate_tbl].header[dt_key] if dt_key in 
                         fs[rate_tbl].header.keys() else None)
+            if not dt is None: t0 += dt/2
 
             # if the time-axis offset, correct it #
-            if t0/ldata[0, 1] > 1e6:
+            if t0/ldata[0, 1] > 1e5:
                 ldata[0] += t0
 
 
@@ -395,6 +420,29 @@ class LCurve(object):
         data, dt = LCurve.read_fits_file(fits_file, **kwargs)
         return LCurve(data[0], data[1], data[2], dt, data[3])  
 
+    
+    @staticmethod
+    def read_xis_lcurve(fits_file, **kwargs):
+        """Read suzaku xis lcurve fits_file.
+            This sets values relevant to NUSTAR and calls read_fits_file
+
+        Parameters:
+            fits_file: name of the files file
+
+        Keywords:
+            See @LCurve.read_fits_file
+
+
+        Returns:
+            LCurve object
+        """
+
+        # set values relevant to XIS files #
+        kwargs.setdefault('min_exp' , 0.1)
+        kwargs.setdefault('gti_tbl' , 'GTI')
+    
+        data, dt = LCurve.read_fits_file(fits_file, **kwargs)
+        return LCurve(data[0], data[1], data[2], dt, data[3])  
 
     @staticmethod
     def read_ni_lcurve(fits_file, **kwargs):
@@ -412,7 +460,7 @@ class LCurve(object):
             LCurve object
         """
 
-        # set values relevant to XMM-PN files #
+        # set values relevant to NICER files #
         kwargs.setdefault('min_exp' , 0.99)
         kwargs.setdefault('gti_tbl' , 'GTI')
         #kwargs.setdefault('gti_skip', 3.0)

@@ -34,6 +34,18 @@ class miscTest(unittest.TestCase):
         b = [[0,1,2,3]]
         for i in range(len(s)):
             np.testing.assert_array_almost_equal(s[i], b[i])
+            
+        # approx = True #
+        s,i = az.misc.split_array(t, 4, approx=True)
+        b = [[0,1,2], [3,4,5]]
+        for i in range(len(s)):
+            np.testing.assert_array_almost_equal(s[i], b[i])
+        
+        # approx = True #
+        s,i = az.misc.split_array(t, 5, approx=True)
+        b = [[0,1,2,3,4,5]]
+        for i in range(len(s)):
+            np.testing.assert_array_almost_equal(s[i], b[i])
 
 
     def test_split_array_2(self):
@@ -43,6 +55,12 @@ class miscTest(unittest.TestCase):
         t = np.arange(6, dtype=np.double)
         t[2] = np.nan
         s,i = az.misc.split_array(t, 2)
+        b = [[0,1], [3,4], [5]]
+        for i in range(len(s)):
+            np.testing.assert_array_almost_equal(s[i], b[i])
+            
+        # approx=true #
+        s,i = az.misc.split_array(t, 2, approx=True)
         b = [[0,1], [3,4], [5]]
         for i in range(len(s)):
             np.testing.assert_array_almost_equal(s[i], b[i])
