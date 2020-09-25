@@ -337,10 +337,10 @@ def extract_nustar_spec(obsids, **kwargs):
         os.chdir('spec')
         if not fresh and len(glob.glob('spec*grp')) != 2:
             # check if we have a saved region file, or a temporary region file
+            saved_reg = '../../log/%s_src.reg'%o
             if exists('src.reg') and exists('bgd.reg'):
                 region = ''
             else:
-                saved_reg = '../../log/%s_src.reg'%o
                 if exists(saved_reg):
                     os.system('cp %s src.reg'%saved_reg)
                     os.system('cp %s bgd.reg'%(saved_reg.replace('_src.', '_bgd.')))

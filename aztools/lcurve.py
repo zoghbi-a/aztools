@@ -286,6 +286,7 @@ class LCurve(object):
         fexp_col = kwargs.get('fexp_col', 'FRACEXP')
         gti_tbl  = kwargs.get('gti_tbl' , 'GTI')
         dt_key   = kwargs.get('dt_key', 'TIMEDEL')
+        #dt = pyfits.open(fits_file)[1].header['timedel']
         gti_skip = kwargs.get('gti_skip', 0.0)
         verbose  = kwargs.get('verbose', False)
 
@@ -365,7 +366,7 @@ class LCurve(object):
         """
 
         # set values relevant to XMM-PN files #
-        kwargs.setdefault('min_exp' , 0.1)
+        kwargs.setdefault('min_exp' , 0.7)
         kwargs.setdefault('gti_tbl' , 2)
     
         data, dt = LCurve.read_fits_file(fits_file, **kwargs)

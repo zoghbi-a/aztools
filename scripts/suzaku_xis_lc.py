@@ -133,26 +133,15 @@ if __name__ == '__main__':
             proc.wait()
 
             # subtract background from source #
-            #cmd = 'lcmath {0}.src {0}.bgd {0}.lc 1.0 {1} no'.format(
-            #        suff, backscale[ipat])
-            #run_cmd(cmd)
-            data_tools.lcmath('%s.src'%suff, '%s.bgd'%suff, '%s.lc'%suff, 1.0, -backscale[ipat])
+            data_tools.fits_lcmath('%s.src'%suff, '%s.bgd'%suff, '%s.lc'%suff, 1.0, -backscale[ipat])
                 
             
         # combine xi0 and xi3
-        #cmd = 'lcmath {}.lc {}.lc {}.lc 1.0 {} yes'.format(
-        #            out.format('xi0', ie+1), out.format('xi3', ie+1), out.format('fi', ie+1),
-        #            src_backscale[0]/src_backscale[2])
-        #run_cmd(cmd)
-        data_tools.lcmath('%s.lc'%out.format('xi0', ie+1), '%s.lc'%out.format('xi3', ie+1), 
+        data_tools.fits_lcmath('%s.lc'%out.format('xi0', ie+1), '%s.lc'%out.format('xi3', ie+1), 
                '%s.lc'%out.format('fi', ie+1),  1.0, src_backscale[0]/src_backscale[2])
         
         # combine all xi detectors #
-        #cmd = 'lcmath {}.lc {}.lc {}.lc 1.0 {} yes'.format(
-        #            out.format('fi', ie+1), out.format('xi1', ie+1), out.format('all', ie+1),
-        #            src_backscale[0]/src_backscale[1])
-        #run_cmd(cmd)
-        data_tools.lcmath('%s.lc'%out.format('fi', ie+1), '%s.lc'%out.format('xi1', ie+1), 
+        data_tools.fits_lcmath('%s.lc'%out.format('fi', ie+1), '%s.lc'%out.format('xi1', ie+1), 
                '%s.lc'%out.format('all', ie+1),  1.0, src_backscale[0]/src_backscale[1])
 
     # clear

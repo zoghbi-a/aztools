@@ -153,7 +153,7 @@ if __name__ == '__main__':
             sout = out.format('{}__{}'.format(instr[ii], ie+1))
             cmd = CMD.format(specfiles, specfiles, idir, odir, INSTR[ii],
                     stem, sout, tbin, chans[ie][0], chans[ie][1],
-                    (enegs[ie][0] + enegs[ie][1])/2., usr_gti, bary_txt)
+                    np.max([(enegs[ie][0] + enegs[ie][1])/2., 3.1]), usr_gti, bary_txt)
             run_cmd(cmd)
 
             ## backscale correction factor ##
@@ -169,7 +169,7 @@ if __name__ == '__main__':
             # subtract background from source #
             #cmd = 'lcmath {0}_sr.lc {0}_bk.lc {0}.lc 1.0 {1} no'.format(
             #            sout, bcorr[ii])
-            data_tools.lcmath('%s_sr.lc'%sout, '%s_bk.lc'%sout, '%s.lc'%sout, 1.0, -bcorr[ii])
+            data_tools.fits_lcmath('%s_sr.lc'%sout, '%s_bk.lc'%sout, '%s.lc'%sout, 1.0, -bcorr[ii])
             run_cmd(cmd)
 
             # clean #
