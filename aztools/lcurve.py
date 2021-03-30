@@ -933,8 +933,8 @@ class LCurve(object):
         if not isinstance(ibin, list): ibin = [ibin]
 
         # the rate and error at the bins of interest #
-        r  = np.sum(np.array(rate)[ibin], 0)
-        re = np.sum(np.square(rerr)[ibin], 0)**0.5
+        r  = np.sum(np.array(rate, dtype=object)[ibin], 0)
+        re = np.sum(np.square(np.array(rerr, dtype=object))[ibin], 0)**0.5
 
         # reference #
         R, Re = [], []
@@ -943,7 +943,7 @@ class LCurve(object):
                 iref = list(range(nen)) if iref == -1 else [iref]
             if ibin_exclude:
                 iref = [i for i in iref if not i in ibin]
-            R  = np.sum(np.array(rate)[iref], 0)
-            Re = np.sum(np.square(rerr)[iref], 0)**0.5
+            R  = np.sum(np.array(rate, dtype=object)[iref], 0)
+            Re = np.sum(np.square(np.array(rerr, dtype=object))[iref], 0)**0.5
 
         return r, re, R, Re

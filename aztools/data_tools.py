@@ -13,7 +13,7 @@ from . import lcurve
 
 def process_xmm_obsids(obsids, detector='pn', **kwargs):
     """Process xmm observations. Assume we are in folder containing obsids.
-    Also assume that heasoft commonds can be accessed.
+    Also assume that heasoft and xmm-sas commonds can be accessed.
     
     obsids: a list of obsids to process
     detector: pn | mos
@@ -55,7 +55,8 @@ def process_xmm_obsids(obsids, detector='pn', **kwargs):
         if not os.path.exists('ccf.cif'):
             os.system('gzip -d *gz >/dev/null 2>&1')
             log_file = '../../log/%s_process.log'%o
-            proc = subp.Popen(['/bin/bash', '-i', '-c', 'sasinit; xmm_process > %s 2>&1'%log_file])
+            #proc = subp.Popen(['/bin/bash', '-i', '-c', 'xmm_process > %s 2>&1'%log_file])
+            proc = subp.Popen(['/bin/bash', '-c', 'xmm_process > %s 2>&1'%log_file])
             procs.append(proc)
             # if we have reached the limit of running processes; wait
             if len(procs) >= nproc_max:
@@ -75,7 +76,8 @@ def process_xmm_obsids(obsids, detector='pn', **kwargs):
         os.chdir(detector)
         if len(glob.glob('*EVL*')) == 0 or fresh:
             log_file = '../../log/%s_process_%s.log'%(o, detector)
-            p = subp.Popen(['/bin/bash', '-i', '-c', 'sasinit; xmm_process %s > %s 2>&1'%(detector, log_file)])
+            #p = subp.Popen(['/bin/bash', '-i', '-c', 'xmm_process %s > %s 2>&1'%(detector, log_file)])
+            p = subp.Popen(['/bin/bash', '-c', 'xmm_process %s > %s 2>&1'%(detector, log_file)])
             procs.append(p)
             if len(procs) >= nproc_max:
                 for p in procs: p.wait()
@@ -86,7 +88,7 @@ def process_xmm_obsids(obsids, detector='pn', **kwargs):
                         
 def extract_xmm_spec(obsids, detector='pn', **kwargs):
     """extract xmm spectra. Assume we are in folder containing obsids.
-    Also assume that heasoft commonds can be accessed.
+    Also assume that heasoft and xmm-sas commonds can be accessed.
     
     obsids: a list of obsids to process
     detector: pn | mos
@@ -139,17 +141,19 @@ def extract_xmm_spec(obsids, detector='pn', **kwargs):
                         
                 # run xmm_filter
                 print('** filtering the %s data ... **'%(det))
-                cmd = 'sasinit; xmm_filter.py ../%s.fits %s --std %s > xmm_filter.log 2>&1'%(det, det, region)
-                p = subp.call(['/bin/bash', '-i', '-c', cmd])
+                cmd = 'xmm_filter.py ../%s.fits %s --std %s > xmm_filter.log 2>&1'%(det, det, region)
+                #p = subp.call(['/bin/bash', '-i', '-c', cmd])
+                p = subp.call(['/bin/bash', '-c', cmd])
                 if not exists(saved_reg):
                     os.system('cp ds9_%s.reg %s'%(det, saved_reg))
                 
             # now extract the spectra #
             if not exists('spec_%s_%d.grp'%(det, iobs+1)):
                 print('** extracting the %s spectra ... **'%det)
-                cmd = ('sasinit; xmm_spec.py %s_filtered.fits ds9_%s.reg -o spec_%s_%d '
+                cmd = ('xmm_spec.py %s_filtered.fits ds9_%s.reg -o spec_%s_%d '
                        '> spec_%s.log 2>&1')%(det, det, det, iobs+1, det)
-                p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+                #p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+                p = subp.Popen(['/bin/bash', '-c', cmd])
                 
                 procs.append(p)
                 if len(procs) >= nproc_max:
@@ -161,7 +165,7 @@ def extract_xmm_spec(obsids, detector='pn', **kwargs):
         
 def extract_xmm_lc(obsids, lcdir, ebins, dt, detector='pn', **kwargs):
     """extract xmm light curves. Assume we are in folder containing obsids.
-    Also assume that heasoft commonds can be accessed.
+    Also assume that heasoft and xmm-sas commonds can be accessed.
     
     obsids: a list of obsids to process
     lcdir: name of folder containing the light curves. e.g. 12b
@@ -231,9 +235,10 @@ def extract_xmm_lc(obsids, lcdir, ebins, dt, detector='pn', **kwargs):
                 # run xmm_filter
                 print('** filtering the %s data ... **'%(det))
                 gti = '--e_expr " && gti(nobgd.gti, TIME)"' if exists('nobgd.gti') else ''
-                cmd = ('sasinit; xmm_filter.py ../%s.fits %s --std --stdR %g %s %s'
+                cmd = ('xmm_filter.py ../%s.fits %s --std --stdR %g %s %s'
                        '> xmm_filter.log 2>&1')%(det, det, stdR, region, gti)
-                p = subp.call(['/bin/bash', '-i', '-c', cmd])
+                #p = subp.call(['/bin/bash', '-i', '-c', cmd])
+                p = subp.call(['/bin/bash', '-c', cmd])
                 if region != '':
                     os.system('cp ds9_%s.reg %s'%(det, saved_reg[1]))
                 
@@ -244,10 +249,11 @@ def extract_xmm_lc(obsids, lcdir, ebins, dt, detector='pn', **kwargs):
                 for ib, eb in enumerate(eBins):
                     wdir = 'tmp_%s_%d'%(det, ib+1)
                     os.system('mkdir -p %s'%wdir); os.chdir(wdir)
-                    cmd = ('sasinit;xmm_lc.py ../../%s_filtered.fits ../../ds9_%s.reg'
+                    cmd = ('xmm_lc.py ../../%s_filtered.fits ../../ds9_%s.reg'
                            ' -e "%s" -t %g -o lc_%s %s >lc__1.log 2>&1;'
                             'rename __1 __%d *; mv lc* ..;')%(det, det, eb, dt, det, extra_opt, ib+1)
-                    p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+                    #p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+                    p = subp.Popen(['/bin/bash', '-c', cmd])
                     procs.append(p)
                     os.chdir('..')
                     if len(procs) >= nproc_max:
@@ -296,7 +302,8 @@ def process_nustar_obsids(obsids, **kwargs):
             log_file = 'log/%s_process.log'%o
             cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
                    'nustar_process %s > %s 2>&1'%(o, log_file))
-            proc = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            #proc = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            proc = subp.Popen(['/bin/bash', '-c', cmd])
             procs.append(proc)
             # if we have reached the limit of running processes; wait
             if len(procs) >= nproc_max:
@@ -350,7 +357,8 @@ def extract_nustar_spec(obsids, **kwargs):
 
             cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
                   'nustar_spec.py -o spec_%d %s > ../../log/spec_%s.log 2>&1'%(iobs+1, region, o))
-            p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            #p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            p = subp.Popen(['/bin/bash', '-c', cmd])
             procs.append(p)
             # if we have reached the limit of running processes; wait
             if len(procs) >= nproc_max:
@@ -368,7 +376,8 @@ def extract_nustar_spec(obsids, **kwargs):
         os.chdir('%s_p/spec'%o)
         cmd = ('rm *grp; ogrppha.py spec_{0}_a_sr.pha spec_{0}_a.grp -f 3 -s 6;'
                'ogrppha.py spec_{0}_b_sr.pha spec_{0}_b.grp -f 3 -s 6').format(iobs+1)
-        subp.call(['/bin/bash', '-i', '-c', cmd])
+        #subp.call(['/bin/bash', '-i', '-c', cmd])
+        subp.call(['/bin/bash', '-c', cmd])
         os.chdir('../..')
 
 
@@ -393,7 +402,7 @@ def spec_summary(obsids, sfile):
             tmid = np.array([fp[0].header['tstart'], fp[0].header['tstop']])
             mref = fp[0].header['mjdrefi'] + fp[0].header['mjdreff']
             mjd = tmid / (24*3600) + mref
-            spec_data.append([mjd, counts/exposure, exposure/1e3])
+            spec_data.append([mjd[0], mjd[1], counts/exposure, exposure/1e3])
             text = '{:5} | {:12} | {:10.8} | {:10.8} | {:10.3} | {:10.5}'.format(
                     iobs+1, o, mjd[0], mjd[1], counts/exposure, exposure/1e3)
             print(text)
@@ -439,7 +448,8 @@ def extract_nustar_lc(obsids, lcdir, ebins, dt, **kwargs):
             cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
                    'nustar_lc.py -e "%s" -t %g --rootdir ../../.. >lc__1.log 2>&1;'
                    'rename __1 __%d lc*; mv lc* ..')%(eb, dt, ib+1)
-            p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            #p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            p = subp.Popen(['/bin/bash', '-c' , cmd])
             procs.append(p)
             if len(procs) >= 20:
                 for p in procs: p.wait()
@@ -488,7 +498,8 @@ def process_suzaku_obsids(obsids, **kwargs):
             log_file = 'log/%s_process.log'%o
             cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
                'suzaku_process %s xis > %s 2>&1'%(o, log_file))
-            proc = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            #proc = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            proc = subp.Popen(['/bin/bash', '-c' , cmd])
             procs.append(proc)
             # if we have reached the limit of running processes; wait
             if len(procs) >= nproc_max:
@@ -532,7 +543,7 @@ def extract_suzaku_spec(obsids, **kwargs):
         os.chdir('spec')
         if not fresh and len(glob.glob('spec*grp')) != 4:
             # check if we have a saved region file, or a temporary region file
-            os.system('rm spec*')
+            #os.system('rm spec*')
             saved_reg = '../../log/%s_src.reg'%o
             if exists('src.reg') and exists('bgd.reg'):
                 region = ''
@@ -546,7 +557,8 @@ def extract_suzaku_spec(obsids, **kwargs):
 
             cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
                   'suzaku_xis_spec.py -o spec_%d %s %s > ../../log/spec_%s.log 2>&1'%(iobs+1, region, extra_opt, o))
-            p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            #p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            p = subp.Popen(['/bin/bash', '-c' , cmd])
             procs.append(p)
             # if we have reached the limit of running processes; wait
             if len(procs) >= nproc_max:
@@ -565,7 +577,8 @@ def extract_suzaku_spec(obsids, **kwargs):
         os.system('rm *grp >/dev/null 2>&1')
         for s in ['fi', 'xi0', 'xi1', 'xi3']:
             cmd = ('ogrppha.py spec_{1}_{0}.src spec_{1}_{0}.grp -f 3 -s 6').format(iobs+1, s)
-            subp.call(['/bin/bash', '-i', '-c', cmd])
+            #subp.call(['/bin/bash', '-i', '-c', cmd])
+            subp.call(['/bin/bash', '-c' , cmd])
         os.chdir('../..')
 
         
@@ -608,7 +621,8 @@ def extract_suzaku_lc(obsids, lcdir, ebins, dt, **kwargs):
             cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
                    'suzaku_xis_lc.py -e "%s" -t %g --rootdir ../../../xis/event_cl '
                    '>lc__1.log 2>&1; rename __1 __%d *; mv lc* ..')%(eb, dt, ib+1)
-            p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            #p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            p = subp.Popen(['/bin/bash', '-c' , cmd])
             procs.append(p)
             if len(procs) >= 20:
                 for p in procs: p.wait()
