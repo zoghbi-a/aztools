@@ -410,3 +410,44 @@ def simple_fit(xval, yval, yerr, mod, **kwargs):
         print(text)
 
     return [p, pe], chi2, pval, nsig, text
+
+
+def set_fancy_plot(plt):
+    """Some settings for plt that make nicer plots"""
+
+    plt.rcParams.update({
+        'font.size': 14, 
+        'font.family': 'serif',
+    
+        'lines.linewidth': 1,
+        'lines.markersize': 8.0,
+        'figure.subplot.wspace': 0.,
+        'axes.linewidth': 0.5,
+        'axes.formatter.use_mathtext': True,
+    
+        'axes.edgecolor': '#111',
+        'axes.facecolor': '#fafafa',
+    
+    
+        'axes.xmargin': 0.1,
+        'xtick.direction': 'in',
+        'xtick.major.size': 9.,
+        'xtick.major.pad': 5.,
+        'xtick.minor.size': 4.,
+        'xtick.top': True,
+        'xtick.minor.visible': True,
+        'xtick.major.width': 0.5,
+        'xtick.minor.width': 0.5,
+    
+        'axes.ymargin': 0.1,
+        'ytick.direction': 'in',
+        'ytick.major.size': 9,
+        'ytick.major.pad': 5.,
+        'ytick.minor.size': 4,
+        'ytick.right': True,
+        'ytick.minor.visible': True,
+        'ytick.major.width': 0.5,
+        'ytick.minor.width': 0.5,
+    
+    })
+
