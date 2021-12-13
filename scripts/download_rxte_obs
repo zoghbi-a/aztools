@@ -1,0 +1,6 @@
+#!/bin/bash
+
+obs=$1
+wget https://heasarc.gsfc.nasa.gov/cgi-bin/W3Browse/xteTar.pl?obsid=$obs
+tar -xvf "xteTar.pl?obsid=$obs"
+rm -r xteTar*

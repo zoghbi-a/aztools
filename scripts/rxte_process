@@ -1,0 +1,16 @@
+#!/bin/bash
+
+obsid=$1
+suff=$2
+
+pcaprepobsid indir="$obsid" outdir="${obsid}_p" modelfile=$CALDB/data/xte_bgd/pca_bkgd_cmfaintl7_eMv20051128.mdl
+
+
+pcaextspect2 \
+    src_infile=@${obsid}_p/FP_dtstd2.lis \
+    bkg_infile=@${obsid}_p/FP_dtbkg2.lis \
+    src_phafile=spec${suff}.pha bkg_phafile=spec${suff}.bgd \
+    gtiandfile= -\
+    filtfile=@${obsid}_p/FP_xtefilt.lis \
+    respfile=spec${suff}.rsp \
+    pculist=ALL layerlist=ALL
