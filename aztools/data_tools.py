@@ -342,9 +342,13 @@ def extract_nustar_spec(obsids, **kwargs):
         os.chdir('%s_p/'%o)
         os.system('mkdir -p spec')
         os.chdir('spec')
-        if not fresh and len(glob.glob('spec*grp')) != 2:
+        if fresh: 
+            os.system('rm spec* >/dev/null 2>&1')
+            
+        if len(glob.glob('spec*grp')) != 2:
             # check if we have a saved region file, or a temporary region file
             saved_reg = '../../log/%s_src.reg'%o
+            
             if exists('src.reg') and exists('bgd.reg'):
                 region = ''
             else:
@@ -355,28 +359,27 @@ def extract_nustar_spec(obsids, **kwargs):
                 else:
                     region = '--create_region'
 
-            cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null;'
-                  'nustar_spec.py -o spec_%d %s > ../../log/spec_%s.log 2>&1'%(iobs+1, region, o))
-            #p = subp.Popen(['/bin/bash', '-i', '-c', cmd])
+            cmd = ('export HEADASNOQUERY=;export HEADASPROMPT=/dev/null; rm spec_%d* >/dev/null 2>&1;'
+                  'nustar_spec.py -o spec_%d %s > ../../log/spec_%s.log 2>&1'%(iobs+1, iobs+1, region, o))
             p = subp.Popen(['/bin/bash', '-c', cmd])
             procs.append(p)
             # if we have reached the limit of running processes; wait
             if len(procs) >= nproc_max:
                 for p in procs: p.wait()
                 procs = []
-            if not exists(saved_reg):
+            if not exists(saved_reg) and exists('src.reg'):
                 os.system('cp src.reg %s'%saved_reg) 
                 os.system('cp bgd.reg %s'%(saved_reg.replace('_src.', '_bgd.')))
         os.chdir('../..')
     # wait for the tasks to end
     for p in procs: p.wait() 
+
     
     # regreoup the spectra
     for iobs,o in enumerate(obsids):
         os.chdir('%s_p/spec'%o)
         cmd = ('rm *grp; ogrppha.py spec_{0}_a_sr.pha spec_{0}_a.grp -f 3 -s 6;'
                'ogrppha.py spec_{0}_b_sr.pha spec_{0}_b.grp -f 3 -s 6').format(iobs+1)
-        #subp.call(['/bin/bash', '-i', '-c', cmd])
         subp.call(['/bin/bash', '-c', cmd])
         os.chdir('../..')
 

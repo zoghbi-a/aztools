@@ -62,8 +62,11 @@ if __name__ == '__main__':
     # ------------------------------------------- #
     # Read the response and background file names #
     with pyfits.open(spec_file) as fp:
-        src_c  = np.array(fp['SPECTRUM'].data.field(1), np.double)
         src_ex = fp['SPECTRUM'].header['EXPOSURE'] 
+        try:
+            src_c  = np.array(fp['SPECTRUM'].data.field('COUNTS'), np.double)
+        except KeyError:
+            src_c  = np.array(fp['SPECTRUM'].data.field('RATE'), np.double) * src_ex 
         try:
             src_bs = fp['SPECTRUM'].header['BACKSCAL'] 
         except:
@@ -86,8 +89,11 @@ if __name__ == '__main__':
     bgd_c = np.zeros_like(src_c)
     if not bgd_file in [None, 'none', 'NONE']:
         with pyfits.open(bgd_file) as fp:
-            bgd_c  = np.array(fp['SPECTRUM'].data.field(1), np.double)
             bgd_ex = fp['SPECTRUM'].header['EXPOSURE'] 
+            try:
+                bgd_c  = np.array(fp['SPECTRUM'].data.field('COUNTS'), np.double)
+            except KeyError:
+                bgd_c  = np.array(fp['SPECTRUM'].data.field('RATE'), np.double) * bgd_ex
             try:
                 bgd_bs = fp['SPECTRUM'].header['BACKSCAL'] 
             except:
@@ -162,7 +168,7 @@ if __name__ == '__main__':
 
 
         # bin width in channel units using oversample_fac
-        width = np.int(np.round(np.max([1, width*1./osample_fac])))
+        width = np.int32(np.round(np.max([1, width*1./osample_fac])))
         ind   = range(ich, np.min([ich+width, nchan]) )
 
         
@@ -224,7 +230,7 @@ if __name__ == '__main__':
         with pyfits.open(out_file) as fp:
             hdu = fp['SPECTRUM']
             orig_cols = hdu.columns
-            orig_cols['GROUPING'].array = np.array(ibin, np.int) 
+            orig_cols['GROUPING'].array = np.array(ibin, np.int32) 
             cols = pyfits.ColDefs(orig_cols)
             tbl = pyfits.BinTableHDU.from_columns(cols)
             hdu.header.update(tbl.header.copy())
