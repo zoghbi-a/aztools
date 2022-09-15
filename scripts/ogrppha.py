@@ -99,6 +99,10 @@ if __name__ == '__main__':
             except:
                 bgd_bs = 1.0
         bgd_c *= (src_bs/bgd_bs) * (src_ex/bgd_ex)
+    # incase bgd_c is extreme, cap it
+    cap = -20
+    iextr = (src_c - bgd_c) < cap
+    bgd_c[iextr] = src_c[iextr] - cap
     # --------------------- #
 
 
