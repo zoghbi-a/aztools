@@ -225,11 +225,11 @@ if __name__ == '__main__':
             bins.append([ichan[ich], ichan[ich+1]-1, ichan[ich+1]-ichan[ich]])
         txt = '\n'.join(['{} {} {}'.format(*x) for x in bins])
         with open('tmp_chans.dat', 'w') as fp: fp.write(txt)
-        os.system('rm {0} &> /dev/null'.format(out_file))
+        if os.path.exists(out_file): os.system(f'rm {out_file}')
         os.system('grppha {} {} "group tmp_chans.dat&exit"'.format(spec_file, out_file))
     else:
         # modify the file with pyfits #
-        os.system('rm {} &> /dev/null'.format(out_file))
+        if os.path.exists(out_file): os.system(f'rm {out_file}')
         os.system('grppha {} {} "group min 20&exit" &> /dev/null'.format(spec_file, out_file))
         with pyfits.open(out_file) as fp:
             hdu = fp['SPECTRUM']
@@ -240,7 +240,6 @@ if __name__ == '__main__':
             hdu.header.update(tbl.header.copy())
             tbl.header = hdu.header.copy()
             grp = pyfits.HDUList([fp[0],tbl])
-            #os.system('rm {0} &> /dev/null'.format(out_file))
             grp.writeto(out_file, overwrite=True)
         print('Grouped file {} written sucessfully'.format(out_file))
     # ------------------ #
