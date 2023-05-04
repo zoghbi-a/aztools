@@ -5,7 +5,7 @@ from astropy.io import fits as pyfits
 import numpy as np
 import os
 import argparse
-from scipy.ndimage import filters
+from scipy.ndimage import gaussian_filter1d
 
 
 if __name__ == '__main__':
@@ -140,7 +140,7 @@ if __name__ == '__main__':
             continue
         iarr = np.concatenate([np.arange(i1, i1+i2) for i1,i2 in zip(istart, ilen)])
         rarr = matrix[ie][5]
-        rarr = filters.gaussian_filter1d(rarr, smooth)
+        rarr = gaussian_filter1d(rarr, smooth)
 
 
         # work out fwhm at ich #
