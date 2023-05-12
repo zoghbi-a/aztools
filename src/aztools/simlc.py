@@ -21,9 +21,14 @@ class SimLC:
 
         """
 
-        # built-in models #
-        self.builtin_models = ['powerlaw', 'broken_powerlaw', 'bending_powerlaw',
-                                'step', 'constant', 'lorentz', 'user_array']
+        # built-in models and the number of parameter for each one #
+        self.builtin_models = {
+            'powerlaw': 2,
+            'broken_powerlaw': 4,
+            'bending_powerlaw': 3,
+            'lorentz': 3,
+            'user_array': None,
+        }
 
 
         # model containers #
@@ -67,6 +72,9 @@ class SimLC:
         if isinstance(model, str):
 
             if model in self.builtin_models:
+                if model != 'user_array' and len(params) != self.builtin_models[model]:
+                    raise ValueError(f'{model} expects {self.builtin_models[model]} parameter')
+
                 model = getattr(SimLC, model)
             else:
                 builtin = ', '.join(self.builtin_models)
