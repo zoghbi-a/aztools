@@ -27,6 +27,7 @@ class SimLC:
             'broken_powerlaw': 4,
             'bending_powerlaw': 3,
             'lorentz': 3,
+            'constant': 1,
             'user_array': None,
         }
 
@@ -441,4 +442,28 @@ class SimLC:
         norm, fq_center, fq_sigma = params
         mod = norm * (fq_sigma/(2*np.pi)) / (
                      (freq-fq_center)**2 + (fq_sigma/2)**2 )
+        return mod
+
+
+    @staticmethod
+    def constant(freq: np.ndarray,
+                 params: Union[np.ndarray, list]) -> np.ndarray:
+        """Generate a constant model to be used as psd or lag.
+
+
+        Parameters
+        ----------
+        freq: np.ndarray
+            The frequency array
+        params: np.ndarray or list
+            Parameters of the model as [value]
+
+        Return
+        ------
+            An array of the model values at freq, containing the psd/lag model
+
+        """
+        if len(params) != 1:
+            raise ValueError('constant needs 1 parameter')
+        mod = freq*0 + params[0]
         return mod
