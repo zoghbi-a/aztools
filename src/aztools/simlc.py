@@ -4,6 +4,7 @@
 from typing import Callable, Union
 
 import numpy as np
+import scipy.stats as st
 from numpy.random import RandomState
 
 
@@ -139,7 +140,7 @@ class SimLC:
                  npoints: int,
                  deltat: float,
                  lcmean: float,
-                 norm: str = 'var'):
+                 **kwargs):
         """Simulate a light curve using the psd model stored in 
             self.psd_models
             
@@ -153,10 +154,15 @@ class SimLC:
             time sampling
         lcmean: float
             the light curve mean
+            
+        Keywords
+        --------
         norm: str
             on of var|rms|leahy
 
         """
+        # get keywords
+        norm = kwargs.get('norm', 'var')
 
         # make sure the norm is known #
         if norm not in ['var', 'leahy', 'rms']:
@@ -170,8 +176,7 @@ class SimLC:
 
         # get correct renoramlization #
         expon = {'var':0, 'leahy':1, 'rms':2}
-        renorm = lcmean**expon[norm] * npoints/(2.*deltat)
-        psd *= renorm
+        psd *= lcmean**expon[norm] * npoints/(2.*deltat)
 
 
         # inverse fft #
@@ -179,9 +184,96 @@ class SimLC:
                   self.rng.randn(len(psd)) * np.sqrt(0.5*psd)*1j )
         ixarr[0] = npoints * lcmean
         ixarr[-1] = np.abs(ixarr[-1])
-        tarr = np.arange(npoints) * deltat * 1.0
-        xarr = np.fft.irfft(ixarr)
-        self.lcurve = [tarr, xarr]
+        self.lcurve = [
+            np.arange(npoints) * deltat * 1.0,
+            np.fft.irfft(ixarr)
+        ]
+
+
+    def simulate_pdf(self,
+                     npoints: int,
+                     deltat: float,
+                     lcmean: float,
+                     **kwargs):
+        """Simulate a light curve using the psd model enforcing 
+        some probability distribution
+        
+        This uses the algorithm of Emmanoulopoulos+ (2013) MNRAS 433, 907–927
+            
+        The normalized psd is stored in self.normalized_psd
+
+        Parameters
+        ----------
+        npoints: int
+            number of points in the light curve
+        deltat: float
+            time sampling
+        lcmean: float
+            the light curve mean
+            
+        Keywords
+        --------
+        norm: str
+            on of var|rms|leahy
+        pdf: scipy.stats._distn_infrastructure.rv_frozen
+            The probability distribution object from scipy.stats that defines
+            the desired pdf. e.g. scipy.stats.lognorm(s=0.5)
+
+        """
+        # get keywords
+        norm = kwargs.get('norm')
+        pdf  = kwargs.get('pdf', st.lognorm(s=0.5))
+
+        # make sure the norm is known #
+        if norm not in ['var', 'leahy', 'rms']:
+            raise ValueError('norm need to be one of var|rms|leahy')
+
+        if not hasattr(pdf, 'rvs'):
+            raise ValueError((
+                'pdf needs to be an instance of '
+                'scipy.stats._distn_infrastructure.rv_frozen'
+            ))
+
+        # calculate psd #
+        freq = np.fft.rfftfreq(npoints, deltat)
+        psd = self.calculate_model(freq)
+        self.normalized_psd = np.array([freq, psd])
+
+
+        # get correct renoramlization #
+        expon = {'var':0, 'leahy':1, 'rms':2}
+        psd *= lcmean**expon[norm] * npoints/(2.*deltat)
+
+
+        # do the algorithm #
+        ixarr = ( self.rng.randn(len(psd)) * np.sqrt(0.5*psd) +
+                  self.rng.randn(len(psd)) * np.sqrt(0.5*psd)*1j )
+        ixarr[0] = npoints * lcmean
+        ixarr[-1] = np.abs(ixarr[-1])
+
+        # step-1 #
+        anorm  = np.abs(ixarr)
+
+        # step-2; before loop starts #
+        xsim = pdf.rvs(npoints)
+        diff = 1.0
+        while diff > 1e-4:
+
+            # step-2 and step-3
+            xsim_j = np.fft.irfft(anorm * np.exp(1j*np.angle(np.fft.rfft(xsim))))
+
+            # step-4
+            xsim_j[np.argsort(xsim_j)] = xsim[np.argsort(xsim)]
+
+            # check for convergenece & prepare for next loop #
+            diff   = np.sum((xsim - xsim_j)**2)/npoints
+            xsim[:]= xsim_j[:]
+
+        # final inverse fft #
+        self.lcurve = [
+            np.arange(npoints) * deltat * 1.0,
+            np.fft.irfft(anorm * np.exp(1j*np.angle(np.fft.rfft(xsim))))
+        ]
 
 
     def apply_lag(self, phase: bool = False):
