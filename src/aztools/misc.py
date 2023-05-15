@@ -10,6 +10,8 @@ try:
 except ImportError:
     hsp = None
 
+from .lcurve import LCurve
+
 
 def split_array(arr: np.ndarray,
                 length: int,
@@ -329,3 +331,40 @@ def set_fancy_plot(plt):
         'ytick.major.width': 0.5,
         'ytick.minor.width': 0.5,
     })
+
+
+def sync_lcurve(lc_list: Union[list, np.ndarray],
+                tbase: np.ndarray = None):
+    """Synchronize a list of arrays or LCurves
+    
+    Parameters
+    ----------
+    lc_list: list
+        A list of arrays or a list of LCurve objects.
+        if arrays, the shape is (nlcurve, 3 (or 4 with fexp), ntime).
+        The 3 is for (time, rate, rerr)
+    tbase: np.ndarray
+        The time array to use for reference. 
+        If not given, use the intersection of all time arrays
+        
+    Return
+    ------
+    a list of sync'ed arrays/light curves
+    """
+
+    if not isinstance(lc_list, (list, np.ndarray)):
+        raise ValueError('lc_list must be a list')
+
+    if isinstance(lc_list[0], LCurve):
+        data = [np.array([lcrv.time, lcrv.rate, lcrv.rerr])
+                for lcrv in lc_list]
+    else:
+        data = [np.array(l) for l in lc_list]
+
+    if tbase is None:
+        tbase = data[0][0]
+        for dat in data[1:]:
+            tbase = tbase[np.in1d(tbase, dat[0])]
+
+    data = [dat[:, np.in1d(dat[0], tbase)] for dat in data]
+    return data

@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from aztools import misc
+from aztools import LCurve, misc
 
 
 class MiscTest(unittest.TestCase):
@@ -118,7 +118,6 @@ class MiscTest(unittest.TestCase):
             np.testing.assert_array_almost_equal(_igrp, grp[idx])
 
 
-
     def test_group_array_2(self):
         # [0,0,2,3,4,4,6,7,8]
 
@@ -154,3 +153,33 @@ class MiscTest(unittest.TestCase):
         grp = [range(4), [4,5,6,7]]
         for idx,_igrp in enumerate(igrp):
             np.testing.assert_array_almost_equal(_igrp, grp[idx])
+
+
+    def test_sync_lcurve_1(self):
+        """test misc.sync_lcurve"""
+        t1arr = np.array([0,1,3,5])
+        t2arr = np.array([0,2,3,4])
+
+        sync = misc.sync_lcurve([t1arr.repeat(3).reshape(-1,3).T,
+                                 t2arr.repeat(3).reshape(-1,3).T], tbase=None)
+        np.testing.assert_array_almost_equal(
+            sync, [np.array([[0,3], [0,3], [0,3]]),
+                   np.array([[0,3], [0,3], [0,3]])]
+        )
+
+        # lists
+        sync = misc.sync_lcurve([[t1arr, t1arr, t1arr],
+                                 [t2arr, t2arr, t2arr]], tbase=None)
+        np.testing.assert_array_almost_equal(
+            sync, [np.array([[0,3], [0,3], [0,3]]),
+                   np.array([[0,3], [0,3], [0,3]])]
+        )
+
+        # LCurve
+        lcrv1 = LCurve(t1arr, t1arr, rerr=t1arr)
+        lcrv2 = LCurve(t2arr, t2arr, rerr=t2arr)
+        sync = misc.sync_lcurve([lcrv1, lcrv2], tbase=None)
+        np.testing.assert_array_almost_equal(
+            sync, [np.array([[0,3], [0,3], [0,3]]),
+                   np.array([[0,3], [0,3], [0,3]])]
+        )
