@@ -5,6 +5,11 @@ from typing import Union
 
 import numpy as np
 
+try:
+    import heasoftpy as hsp
+except ImportError:
+    hsp = None
+
 
 def split_array(arr: np.ndarray,
                 length: int,
@@ -186,3 +191,141 @@ def group_array(arr: np.ndarray,
             grp = [[]]
 
     return new_ind
+
+
+def write_pha_spec(bin1: Union[list, np.ndarray],
+                   bin2: Union[list, np.ndarray],
+                   arr: np.ndarray,
+                   err: np.ndarray,
+                   stem: str,
+                   **kwargs):
+    """Write some data array to pha file so it can be
+    used inside xspec
+
+    Parameters
+    ----------
+    bin1: list of np.ndarray.
+        The lower boundaries of bins
+    bin2: list of np.ndarray.
+        The upper boundaries of bins
+    arr: np.ndarray
+        The array of data values to be written.
+    err: np.ndarray
+        The array of measurement error corresponding to arr.
+
+    Keywords
+    --------
+    stem: str:
+        Stem name for the output spectra -> {stem}.pha|rsp
+
+
+    """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+
+    verbose = kwargs.get('verbose', True)
+
+    if not len(bin1) == len(bin2) == len(arr) == len(err):
+        raise ValueError('bin1, bin2, arr, err need to have the same length')
+
+    delb = np.array(bin2) - np.array(bin1)
+    txt = '\n'.join([(f'{_bin1:8.8} {bin2[idx]:8.8} '
+                      f'{arr[idx]*delb[idx]:8.8} {err[idx]*delb[idx]:8.8}')
+                     for idx,_bin1 in enumerate(bin1)])
+    with open(f'{stem}.xsp', 'w', encoding='utf8') as filep:
+        filep.write(f'{txt}\n')
+
+    # pylint: disable=no-member
+    out = hsp.flx2xsp(infile=f'{stem}.xsp', phafile=f'{stem}.pha',
+                      rspfile=f'{stem}.rsp')
+    if out.returncode != 0:
+        raise RuntimeError(out.output)
+    if verbose:
+        print(f'{stem}.pha was created successfully')
+
+
+def write_2d_veusz(fname: str,
+                   arr: np.ndarray,
+                   xcent: np.ndarray = None,
+                   ycent: np.ndarray = None,
+                   append: bool = False):
+    """Write a 2d array to a file for veusz viewing
+    
+    Parameters
+    ----------
+    fname: str
+        The name of file to write.
+    arr: np.ndarray
+        The array to write, its shape is (len(xcent), len(ycent))
+    xcent: np.ndarray:
+        Central points of X-axis.
+    ycent: np.ndarray:
+        Central points of Y-axis.
+    append: bool
+        Append to file? Default=False
+
+    """
+    if xcent is None:
+        xcent = np.arange(len(arr[0]))
+    if ycent is None:
+        ycent = np.arange(len(arr))
+
+    if arr.shape == (len(xcent),len(ycent)):
+        raise ValueError('arr.shape does not match xcent,ycent')
+
+    thead = '\n\n'
+    assert(arr.shape==(len(xcent),len(ycent)))
+    thead += f"xcent {' '.join([f'{xcen}' for xcen in xcent])}\n"
+    thead += f"ycent {' '.join([f'{ycen}' for ycen in ycent])}\n"
+
+    arr = arr.T
+    txt2d = '\n'.join([' '.join([f'{arr[idx,jdx]:3.3e}'
+                                 for jdx,_ in enumerate(arr[0])])
+                      for idx,_ in enumerate(arr)])
+    with open(fname, 'a' if append else 'w', encoding='utf8') as filep:
+        filep.write(f'{thead}{txt2d}')
+
+
+def set_fancy_plot(plt):
+    """Some settings for plt that make nicer plots
+    
+    Parameters
+    ----------
+    plt: matplotlib.pyplot
+    
+    """
+
+    plt.rcParams.update({
+        'font.size': 14, 
+        'font.family': 'serif',
+
+        'lines.linewidth': 1,
+        'lines.markersize': 8.0,
+        'figure.subplot.wspace': 0.,
+        'axes.linewidth': 0.5,
+        'axes.formatter.use_mathtext': True,
+
+        'axes.edgecolor': '#111',
+        'axes.facecolor': '#fafafa',
+
+
+        'axes.xmargin': 0.1,
+        'xtick.direction': 'in',
+        'xtick.major.size': 9.,
+        'xtick.major.pad': 5.,
+        'xtick.minor.size': 4.,
+        'xtick.top': True,
+        'xtick.minor.visible': True,
+        'xtick.major.width': 0.5,
+        'xtick.minor.width': 0.5,
+
+        'axes.ymargin': 0.1,
+        'ytick.direction': 'in',
+        'ytick.major.size': 9,
+        'ytick.major.pad': 5.,
+        'ytick.minor.size': 4,
+        'ytick.right': True,
+        'ytick.minor.visible': True,
+        'ytick.major.width': 0.5,
+        'ytick.minor.width': 0.5,
+    })
