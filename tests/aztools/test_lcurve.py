@@ -191,3 +191,19 @@ class LCurveTest(unittest.TestCase):
         prnd = np.random.randn(8)[1]*4 + 1
         np.testing.assert_array_almost_equal(lcrv.rate,  [0, prnd, 2]+[np.nan]*4+[7])
         np.testing.assert_array_almost_equal(lcrv.rerr,  [1, 4, 3]+[np.nan]*4+[8])
+
+
+    def test_calculate_psd(self):
+        """test LCurve.calculate_psd"""
+        rat = np.random.randn(6) + 10
+        psd = LCurve.calculate_psd(rat, 1.0, 'rms')
+
+        np.testing.assert_array_almost_equal(
+            psd[0], np.fft.rfftfreq(6, 1.0)[1:-1])
+        np.testing.assert_array_almost_equal(
+            psd[1], (2./(6.*rat.mean()**2))*np.abs(np.fft.rfft(rat)[1:-1])**2)
+
+        rat = [rat[:3], rat[3:]]
+        psd = LCurve.calculate_psd(rat, 1.0, 'rms')
+        np.testing.assert_array_almost_equal(
+            psd[0], np.sort(np.concatenate([np.fft.rfftfreq(3, 1.0)[1:-1]*2])))

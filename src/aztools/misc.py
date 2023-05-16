@@ -13,8 +13,6 @@ except ImportError:
     hsp = None
 
 
-from .lcurve import LCurve
-
 
 def split_array(arr: np.ndarray,
                 length: int,
@@ -358,7 +356,7 @@ def sync_lcurve(lc_list: Union[list, np.ndarray],
     if not isinstance(lc_list, (list, np.ndarray)):
         raise ValueError('lc_list must be a list')
 
-    if isinstance(lc_list[0], LCurve):
+    if hasattr(lc_list[0], 'deltat'): # LCurve
         data = [np.array([lcrv.time, lcrv.rate, lcrv.rerr])
                 for lcrv in lc_list]
     else:
@@ -373,7 +371,7 @@ def sync_lcurve(lc_list: Union[list, np.ndarray],
     return data
 
 
-def lcurve_to_segments(lcurves: LCurve,
+def lcurve_to_segments(lcurves,
                        seglen: float,
                        strict: bool = False,
                        **kwargs):
