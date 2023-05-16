@@ -423,7 +423,9 @@ disable=raw-checker-failed,
         use-symbolic-message-instead,
         missing-module-docstring,
         unnecessary-pass,
-	too-many-locals
+	too-many-locals,
+	too-many-branches,
+	too-many-statements
 
 
 

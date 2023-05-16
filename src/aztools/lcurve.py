@@ -421,3 +421,247 @@ class LCurve:
         # return #
         desc = {'fql': fql, 'fqm':fqm, 'noise':nse, 'bias':bias}
         return frq, psd, psde, desc
+
+
+    @staticmethod
+    def calculate_lag(xarr: Union[np.ndarray, list],
+                      yarr: Union[np.ndarray, list],
+                      deltat: float,
+                      fqbin: dict = None,
+                      **kwargs):
+        """Calculate and bin lags from two lists of light curves.
+        
+        Parameters
+        ----------
+        xarr: np.ndarray or list
+            Array or list of arrays of light curve rates.
+        yarr: np.ndarray or list
+            Array or list of arrays of reference light curve rates.
+        deltat: float
+            Time bin width of the light curve.
+        fqbin: dict
+            Binning dict to be passed to @misc.group_array
+            to bin the frequency axis. If None, return raw lag
+
+        Keywords
+        --------
+        xerr: np.ndarray or a list of np.ndarray
+            The measurement error arrays that corresponds to rate.
+            If not given, assume, poisson noise.
+        xbgd: np.ndarray or a list of np.ndarray.
+            The background rate arrays that corresponds to source rate. 
+            In this case, rate above is assumed background subtracted.
+        yerr: np.ndarray or a list of np.ndarray
+            The measurement error arrays that corresponds to yarr.
+            If not given, assume, poisson noise.
+        ybgd: np.ndarray or a list of np.ndarray.
+            The background rate arrays that corresponds to ref_rate. 
+            In this case, yarr above is assumed background subtracted.
+        phase: bool
+            return phase lag instead of time lag
+        taper: bool
+            Apply Hanning tapering before calculating the fft
+            see p388 Bendat & Piersol; the fft need to be multiplied
+            by sqrt(8/3) to componsate for the reduced variance. Default: False
+        norm: str
+            How to normalize the fft during the calculations. None|rms|leahy|var.
+            Default is None, so the calculations is done with raw numpy fft
+
+
+        Return
+        ------
+        freq, lag, lage, extra
+        extra = {'fqm', 'fql', 'xlimit', 'ylimit' ..}
+        """
+
+        phase = kwargs.get('phase', False)
+
+
+        # check input #
+        if not isinstance(xarr[0], (np.ndarray, list)):
+            xarr = [xarr]
+        if not isinstance(yarr[0], (np.ndarray, list)):
+            yarr = [yarr]
+
+        # check that lc and reference are compatible #
+        for xar,yar in zip(xarr, yarr):
+            if len(xar) != len(yar):
+                raise ValueError('xarr and yarr are incompatible')
+
+
+        # error and background values for estimating noise level #
+        xbgd = kwargs.get('xbgd', 0.0)
+        ybgd = kwargs.get('ybgd', 0.0)
+        if not isinstance(xbgd, (np.ndarray, list)):
+            xbgd = [xbgd for _ in xarr]
+        if not isinstance(ybgd, (np.ndarray, list)):
+            ybgd = [ybgd for _ in yarr]
+
+        xerr = kwargs.get('xerr', None)
+        yerr = kwargs.get('yerr', None)
+        if xerr is None:
+            # this is not always correct!
+            xerr = [np.sqrt((xar+xbg)/deltat) for xar,xbg in zip(xarr, xbgd)]
+        if yerr is None:
+            # this is not always correct!
+            yerr = [np.sqrt((yar+ybg)/deltat) for yar,ybg in zip(yarr, ybgd)]
+
+        if not isinstance(xerr[0], (np.ndarray, list)):
+            xerr = [xerr]
+        if not isinstance(yerr[0], (np.ndarray, list)):
+            yerr = [yerr]
+
+
+        # tapering ? #
+        taper = kwargs.get('taper', True)
+        taper_factor = 1.0
+        if taper:
+            xarr = [(arr-arr.mean()) * np.hanning(len(arr)) + arr.mean() for arr in xarr]
+            yarr = [(arr-arr.mean()) * np.hanning(len(arr)) + arr.mean() for arr in yarr]
+            taper_factor = np.sqrt(8/3)
+
+
+        # normalization ? #
+        norm = kwargs.get('norm', None)
+        if not norm in [None, 'rms', 'leahy', 'var']:
+            raise ValueError('Unknown norm value. It should be None|rms|leahy|var')
+        expo = {'var':0, 'leahy':1, 'rms':2}
+        def normf(arr):
+            return 1.0 if norm is None else (
+                2.*deltat / (len(arr) * np.mean(arr)**expo[norm]))**0.5
+
+
+        # fft; remove the 0-freq and the nyquist #
+        # noise level in psd. See comments in @calculate_psd #
+        # noise level is: <e^2>/(mu^2 fq_nyq) for rms norm; then renorm accordingly
+        fnyq = 0.5/deltat
+        freq = [np.fft.rfftfreq(len(_), deltat)[1:-1] for _ in xarr]
+
+        xfft = [np.fft.rfft(_)[1:-1]*taper_factor*normf(_) for _ in xarr]
+        xpsd = [np.abs(_)**2 for _ in xfft]
+        xnse = [_[0]*0+(np.mean(_[1]**2)*len(_[1])*normf(_[2])**2)/(fnyq*2*deltat)
+                    for _ in zip(freq, xerr, xarr)]
+
+        yfft = [np.fft.rfft(_)[1:-1]*taper_factor*normf(_) for _ in yarr]
+        ypsd = [np.abs(_)**2 for _ in yfft]
+        ynse = [_[0]*0+(np.mean(_[1]**2)*len(_[1])*normf(_[2])**2)/(fnyq*2*deltat)
+                    for _ in zip(freq, yerr, yarr)]
+
+        crss  = [_[1]*np.conj(_[0]) for _ in zip(xfft, yfft)]
+
+
+        # flattern lists #
+        concat = np.concatenate
+        freq = concat(freq)
+        isort = np.argsort(freq)
+        freq = freq[isort]
+        crss = concat(crss)[isort]
+        xpsd = concat(xpsd)[isort]
+        ypsd = concat(ypsd)[isort]
+        xnse = concat(xnse)[isort]
+        ynse = concat(ynse)[isort]
+
+
+        # save raw values
+        raw = {'freq': freq, 'crss':crss,
+               'xfft': xfft, 'xpsd': xpsd, 'xnse': xnse,
+               'yftt': yfft, 'ypsd': ypsd, 'ynse': ynse}
+
+        # do we need just raw lags? #
+        if fqbin is None:
+            lag = np.angle(crss) / (1. if phase else 2*np.pi*freq)
+            return freq, lag, raw
+
+
+        # bin the lag #
+        idx = group_array(freq, do_unique=True, **fqbin)
+        fqm = np.array([len(jdx) for jdx in idx])
+        fql = np.array([freq[i].min() for i in idx] + [freq[idx[-1].max()]])
+
+
+        def mean(arr):
+            return np.array([np.mean(arr[jdx]) for jdx in idx])
+        def lmean(arr):
+            return np.array([10**(np.mean(np.log10(arr[jdx]))) for jdx in idx])
+
+        freq = lmean(freq)
+        xpsd = mean(xpsd)
+        ypsd = mean(ypsd)
+        xnse = mean(xnse)
+        ynse = mean(ynse)
+        crss = mean(crss)
+
+
+        # phase lag and its error #
+        # g2 is caluclated without noise subtraciton
+        # see paragraph after eq. 17 in Nowak+99
+        # see eq. 11, 12 in Uttley+14. Nowak (and Uttley too) clearly
+        # states that the noise shouldn't be subtracted)
+        lag = np.angle(crss)
+        nn2 = ((xpsd - xnse)*ynse + (ypsd - ynse)*xnse + xnse*ynse) / fqm
+        gg2 = (np.abs(crss)**2) / (xpsd * ypsd)
+
+        # mask out points where coherence is undefined #
+        gg2 = np.clip(gg2, 1e-5, 1.0)
+        lag_e = np.clip(np.sqrt((1 - gg2) / (2*gg2*fqm)), 0, np.pi)
+
+
+        # coherence gamma_2 #
+        # here we subtract the noise; see eq. 8
+        # in Vaughan+97 and related definitions
+        coh   = (np.abs(crss)**2 - nn2) / ((xpsd-xnse) * (ypsd-ynse))
+        coh = np.clip(coh, 1e-5, 1-1e-5)
+        dcoh  = (2/fqm)**0.5 * (1 - coh)/np.sqrt(coh)
+        coh_e = coh * (fqm**-0.5) * ((2*nn2*nn2*fqm)/(np.abs(crss)**2 - nn2)**2 +
+                (xnse**2/(xpsd-xnse)**2) + (ynse**2/(ypsd-ynse)**2) + (fqm*dcoh/coh**2))**0.5
+
+        # rms spectrum from psd; error from eq. 14 in Uttley+14 #
+        # the rms here is in absolute not fractional units
+        dfq = fql[1:]-fql[:-1]
+        xmu = np.mean([np.mean(_) for _ in xarr])
+        ymu = np.mean([np.mean(_) for _ in yarr])
+        rms = xmu * (dfq * np.abs(xpsd - xnse))**0.5
+        sigx2 = rms**2
+        sigxn2 = dfq * xnse * xmu**2
+        rmse = ((2*sigx2*sigxn2 + sigxn2**2) / (2*fqm*sigx2) ) **0.5
+        ibad = xpsd<xnse
+        rms[ibad] = 0.0
+        rmse[ibad] = np.max(np.concatenate((rms, rmse)))
+
+
+        # covariance: eq. 13, 15 in Uttley+14 #
+        # again in absolute not fractional units #
+        cov  = ( (np.abs(crss)**2 - nn2) * xmu * xmu * dfq / (ypsd-ynse) )
+        ibad = (cov < 0) | (ypsd<=ynse)
+        cov  = np.abs(cov)**0.5
+        sigy2 = dfq * np.abs(ypsd-ynse) * ymu**2
+        sigyn2 = dfq * ynse * ymu**2
+        cove = ((sigyn2*cov**2 + sigy2*sigxn2 + sigxn2*sigyn2) / (2*fqm*sigy2))**0.5
+        cov[ibad] = 0.0
+        cove[ibad] = np.max(np.concatenate((cov, cove)))
+
+
+        # limits on lag measurements due to poisson noise #
+        # equation 30 in Vaughan+2003 #
+        xlimit = np.sqrt(np.abs(xnse/(fqm * gg2 * (xpsd-xnse))))
+        ylimit = np.sqrt(np.abs(ynse/(fqm * gg2 * (ypsd-ynse))))
+        xlimit = np.clip(xlimit, -np.pi, np.pi)
+        ylimit = np.clip(ylimit, -np.pi, np.pi)
+
+
+        # do we need time lag instead of phase lag? #
+        if not phase:
+            lag    /= (2*np.pi*freq)
+            lag_e  /= (2*np.pi*freq)
+            xlimit /= (2*np.pi*freq)
+            ylimit /= (2*np.pi*freq)
+
+
+        # return #
+        extra = {'fql': fql, 'fqm':fqm, 'xlimit':xlimit, 'yLimit':ylimit,
+                'limit_avg':(xlimit+ylimit)/2, 'coh': np.array([coh, coh_e]),
+                'xpsd': xpsd, 'xnse': xnse, 'ypsd': ypsd, 'ynse': ynse,
+                'cxd': crss, 'nn2': nn2, 'gg2': gg2, 'idx': idx, 'freq': freq,
+                'raw': raw, 'rms': np.array([rms, rmse]), 'cov': np.array([cov, cove])}
+
+        return freq, lag, lag_e, extra
