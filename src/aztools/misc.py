@@ -1,14 +1,17 @@
 """Miscellaneous Utilities"""
 
+import os
 from itertools import groupby
 from typing import Union
 
 import numpy as np
+from astropy.io import fits
 
 try:
     import heasoftpy as hsp
 except ImportError:
     hsp = None
+
 
 from .lcurve import LCurve
 
@@ -368,3 +371,173 @@ def sync_lcurve(lc_list: Union[list, np.ndarray],
 
     data = [dat[:, np.in1d(dat[0], tbase)] for dat in data]
     return data
+
+
+def lcurve_to_segments(lcurves: LCurve,
+                       seglen: float,
+                       strict: bool = False,
+                       **kwargs):
+    """Split an LCurve or a list of them to segments. 
+    Useful to be used with calculate_psd|lag etc.
+
+
+    Parameters
+    ----------
+    lcurves: LCurve
+        an LCurve or a list of them
+    seglen: float
+        segment length in seconds.
+    strict: bool
+        force all segments to have length length. Some data 
+        may be discarded
+
+    Keywords
+    --------
+    uneven: The light curves are uneven, so the splitting produces 
+        segments that have the same number of points. Default: False
+    **other arguments to be passed to split_array
+
+    Returns
+    -------
+    rate, rerr, time, seg_idx
+    seg_idx is the indices used to create the segments.
+
+    """
+    # Keywords
+    uneven = kwargs.get('uneven', False)
+
+
+    if not isinstance(lcurves, list):
+        lcurves = [lcurves]
+
+    # assert the same sampling #
+    deltat = lcurves[0].deltat
+    for lcrv in lcurves:
+        if deltat != lcrv.deltat:
+            raise ValueError('deltat of the input LCurve do not match')
+
+    # segments details #
+    iseglen = np.int64(seglen/deltat)
+
+    # make sure the LCurve objects are evenly sampled #
+    if not uneven:
+        lcurves = [lcrv.make_even() for lcrv in lcurves]
+
+
+    # split the rate arrays #
+    splt = [split_array(lcrv.rate, iseglen, lcrv.rerr,
+                        lcrv.time, strict=strict, **kwargs) for lcrv in lcurves]
+
+    # flatten the segments into on large list #
+    rate = [idx for spt in splt for idx in spt[0]]
+    rerr = [idx for spt in splt for idx in spt[2]]
+    time = [idx for spt in splt for idx in spt[3]]
+    seg_idx = [spt[1] for spt in splt]
+    return rate, rerr, time, seg_idx
+
+
+def read_fits_lcurve(fits_file: str, **kwargs):
+    """Read a light cuurve from fits file
+
+    Parameters
+    ----------
+    fits_file: str
+        Name of the fits file.
+
+    Keywords
+    --------
+    min_exp: float
+        minimum fractional exposure to allow. Default 0.0 for all
+    rate_tbl: str or int
+        Name or number of hdu that contains the light curve data. Default: RATE
+    rate_col: str or int
+        Name or number of rate column. Default: RATE
+    time_col: str or int 
+        Name or number of time column. Default: TIME
+    rerr_col: str or int 
+        Name or number of rerr column. Default: ERROR
+    fexp_col: str or int 
+        Name or number of the fracexp column. Default: FRACEXP
+    gti_table: str or int
+        Name or number of gti extension hdu. Default: GTI 
+    dt_key: str or int
+        Name of time sampling keyword in header. Default: TIMEDEL
+    gti_skip: float
+        How many seconds to skip at the gti boundaries. Default: 0
+    verbose: bool
+        Print progress
+
+
+    Returns
+    -------
+        lcurve_data (shape: 4,nt containing, time, rate, rerr, fexp), deltat
+
+    """
+
+    # default parameters #
+    min_exp  = kwargs.get('min_exp', 0.)
+    rate_tbl = kwargs.get('rate_tbl', 'RATE')
+    rate_col = kwargs.get('rate_col', 'RATE')
+    time_col = kwargs.get('time_col', 'TIME')
+    rerr_col = kwargs.get('rerr_col', 'ERROR')
+    fexp_col = kwargs.get('fexp_col', 'FRACEXP')
+    gti_tbl  = kwargs.get('gti_tbl' , 'GTI')
+    dt_key   = kwargs.get('dt_key', 'TIMEDEL')
+    gti_skip = kwargs.get('gti_skip', 0.0)
+    verbose  = kwargs.get('verbose', False)
+
+
+    # does file exist? #
+    if not os.path.exists(fits_file):
+        raise ValueError(f'file {fits_file} does not exist')
+
+    # read file #
+    with fits.open(fits_file) as filep:
+
+        # lc data #
+        data = filep[rate_tbl].data
+        ldata = np.array([  data.field(time_col),
+                            data.field(rate_col),
+                            data.field(rerr_col)], dtype=np.double)
+
+
+        # start time and time sampling #
+        tstart = filep[rate_tbl].header.get('TSTART', 0.0)
+        time_0 = filep[rate_tbl].header.get('timezero', 0.0)
+        deltat = filep[rate_tbl].header.get(dt_key, None)
+        if deltat is not None:
+            tstart += deltat/2
+
+        # if the time-axis offset, correct it #
+        if tstart/ldata[0, 1] > 1e5:
+            ldata[0] += tstart + time_0
+
+        # gti #
+        try:
+            lgti  = np.array([filep[gti_tbl].data.field(0),
+                              filep[gti_tbl].data.field(1)], dtype=np.double)
+        except KeyError:
+            if verbose:
+                print(f'No GTI found in {fits_file}')
+            lgti = np.array([[ldata[0, 0]], [ldata[0, -1]]])
+
+
+        # fractional exposure #
+        try:
+            lfracexp = data.field(fexp_col)
+        except KeyError:
+            if verbose:
+                print(f'cannot read fracexp_col in {fits_file}')
+            lfracexp = np.ones_like(ldata[0])
+
+
+        # apply gti #
+        igti  = ldata[0] < 0
+        for gstart, gstop in lgti.T:
+            igti = igti | ( (ldata[0] >= (gstart+gti_skip)) &
+                            (ldata[0] <= (gstop -gti_skip)) )
+        igood = igti & (lfracexp >= min_exp) & (np.isfinite(ldata[0]))
+        ldata = np.vstack([ldata, lfracexp])
+        ldata = ldata[:, igood]
+
+    return ldata, deltat

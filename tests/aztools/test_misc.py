@@ -1,6 +1,8 @@
+import os
 import unittest
 
 import numpy as np
+from astropy.io import fits
 
 from aztools import LCurve, misc
 
@@ -183,3 +185,64 @@ class MiscTest(unittest.TestCase):
             sync, [np.array([[0,3], [0,3], [0,3]]),
                    np.array([[0,3], [0,3], [0,3]])]
         )
+
+
+    def test_lcurve_to_segments_1(self):
+        """test misc.lcurve_to_segments"""
+        tarr = np.arange(8)
+        rarr = tarr*2
+        rerr = tarr*0.1
+        lcrv = LCurve(tarr, rarr, rerr=rerr, deltat=1.0)
+
+        seg = misc.lcurve_to_segments(lcrv, seglen=3.0, strict=True)
+        np.testing.assert_array_almost_equal(seg[0], [rarr[:3], rarr[3:6]])
+        np.testing.assert_array_almost_equal(seg[1], [rerr[:3], rerr[3:6]])
+        np.testing.assert_array_almost_equal(seg[2], [tarr[:3], tarr[3:6]])
+        np.testing.assert_array_almost_equal(seg[3][0], np.array([[0,1,2], [3,4,5]]))
+
+        # strict=False
+        seg = misc.lcurve_to_segments(lcrv, seglen=3.0, strict=False)
+        np.testing.assert_array_almost_equal(seg[0][-1], rarr[6:])
+        np.testing.assert_array_almost_equal(seg[1][-1], rerr[6:])
+        np.testing.assert_array_almost_equal(seg[2][-1], tarr[6:])
+        np.testing.assert_array_almost_equal(seg[3][0][-1], np.array([6,7]))
+
+
+    def test_lcurve_to_segments_2(self):
+        """test misc.lcurve_to_segments"""
+        tarr = np.array([0, 1, 4, 5, 6, 7])
+        rarr = tarr*2
+        rerr = tarr*0.1
+        lcrv = LCurve(tarr, rarr, rerr=rerr, deltat=1.0)
+
+        seg = misc.lcurve_to_segments(lcrv, seglen=3.0, strict=True, uneven=False)
+        np.testing.assert_array_almost_equal(seg[0], [np.array([4,5,6])*2])
+
+        seg = misc.lcurve_to_segments(lcrv, seglen=3.0, strict=False, uneven=False)
+        for idx in [0,1,2]:
+            np.testing.assert_array_almost_equal(
+                seg[0][idx], [np.array([0,1])*2, np.array([4,5,6])*2, np.array([7])*2][idx])
+
+        seg = misc.lcurve_to_segments(lcrv, seglen=3.0, strict=True, uneven=True)
+        np.testing.assert_array_almost_equal(seg[0], [np.array([0,1,4])*2, np.array([5,6,7])*2])
+
+
+    def test_read_fits_lcurve(self):
+        """test read_fits_lcurve; write one and re-read it"""
+        tarr  = np.arange(4)
+        xarr  = np.arange(4)
+        xerr = np.arange(1, 5)*1.
+        hdu = fits.BinTableHDU.from_columns([
+                fits.Column(name='TIME', format='E', array=tarr),
+                fits.Column(name='RATE', format='E', array=xarr),
+                fits.Column(name='ERROR', format='E', array=xerr),
+            ])
+        hdu.name = 'RATE'
+        fname = 'tmp.fits'
+        hdu.writeto(fname, overwrite=True)
+        lcrv, _ = misc.read_fits_lcurve(fname)
+        np.testing.assert_array_almost_equal(tarr,  lcrv[0])
+        np.testing.assert_array_almost_equal(xarr,  lcrv[1])
+        np.testing.assert_array_almost_equal(xerr, lcrv[2])
+        if os.path.exists(fname):
+            os.remove(fname)
