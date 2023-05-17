@@ -140,3 +140,60 @@ def process_nustar_obsid(obsid: str, **kwargs):
 
 # parallel version of process_nicer_obsid
 process_nustar_obsids = _make_parallel(process_nustar_obsid)
+
+
+def process_suzaku_obsid(obsid: str, **kwargs):
+    """Process SUZAKU XIS obsid with aepipeline
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    Any parameters to be passed to the reduction pipeline
+    
+    Return
+    ------
+    0 if succesful, and a heasoft error code otherwise
+    
+    """
+
+    # defaults
+    # indir=$indir outdir=$outdir steminputs=$stem \
+# entry_stage=1 exit_stage=2 clobber=yes instrument=$instr
+
+    instr = 'xis'
+
+    in_pars = {
+        'outdir'     : f'{obsid}_p/{instr}/event_cl',
+        'steminputs' : f'ae{obsid}',
+        'instrument' : instr,
+        'entrystage' : 1,
+        'exitstage'  : 2,
+
+        'clobber'    : True,
+        'noprompt'   : True,
+    }
+
+
+    # update input with given parameter keywords
+    in_pars.update(**kwargs)
+    in_pars['indir'] = obsid
+
+    # run task
+    with hsp.utils.local_pfiles_context(): # pylint: disable=no-member
+        out = hsp.aepipeline(**in_pars) # pylint: disable=no-member
+
+    if out.returncode == 0:
+        print(f'{obsid} processed sucessfully!')
+    else:
+        logfile = f'process_suzaku_{obsid}.log'
+        print(f'ERROR processing {obsid}; Writing log to {logfile}')
+        with open(logfile, 'w', encoding='utf8') as filep:
+            filep.write(out)
+    return out.returncode
+
+# parallel version of process_suzaku_obsid
+process_suzaku_obsids = _make_parallel(process_suzaku_obsid)
