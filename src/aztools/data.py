@@ -61,19 +61,19 @@ def process_nicer_obsid(obsid: str, **kwargs):
     in_pars = {
         'geomag_path': '/local/data/reverb/azoghbi/soft/caldb/data/gen/bcf/geomag',
         'filtcolumns': 'NICERV4,3C50',
-        'detlist': 'launch,-14,-34',
-        'min_fpm': 50,
+        'detlist'    : 'launch,-14,-34',
+        'min_fpm'    : 50,
 
-        'clobber': True,
-        'noprompt': True
+        'clobber'    : True,
+        'noprompt'   : True
     }
     # update input with given parameter keywords
     in_pars.update(**kwargs)
     in_pars['indir'] = obsid
 
     # run task
-    # pylint: disable=no-member
-    out = hsp.nicerl2(**in_pars)
+    with hsp.utils.local_pfiles_context(): # pylint: disable=no-member
+        out = hsp.nicerl2(**in_pars) # pylint: disable=no-member
 
     if out.returncode == 0:
         print(f'{obsid} processed sucessfully!')
@@ -87,3 +87,56 @@ def process_nicer_obsid(obsid: str, **kwargs):
 
 # parallel version of process_nicer_obsid
 process_nicer_obsids = _make_parallel(process_nicer_obsid)
+
+
+def process_nustar_obsid(obsid: str, **kwargs):
+    """Process NuSTAR obsid with nupipeline
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    Any parameters to be passed to the reduction pipeline
+    
+    Return
+    ------
+    0 if succesful, and a heasoft error code otherwise
+    
+    """
+
+    # defaults
+    in_pars = {
+        'outdir'     : f'{obsid}_p/event_cl',
+        'steminputs' : f'nu{obsid}',
+        'entrystage' : 1,
+        'exitstage'  : 2,
+        'pntra'      : 'OBJECT',
+        'pntdec'     : 'OBJECT',
+
+        'clobber'    : True,
+        'noprompt'   : True,
+    }
+
+
+    # update input with given parameter keywords
+    in_pars.update(**kwargs)
+    in_pars['indir'] = obsid
+
+    # run task
+    with hsp.utils.local_pfiles_context(): # pylint: disable=no-member
+        out = hsp.nupipeline(**in_pars) # pylint: disable=no-member
+
+    if out.returncode == 0:
+        print(f'{obsid} processed sucessfully!')
+    else:
+        logfile = f'process_nustar_{obsid}.log'
+        print(f'ERROR processing {obsid}; Writing log to {logfile}')
+        with open(logfile, 'w', encoding='utf8') as filep:
+            filep.write(out)
+    return out.returncode
+
+# parallel version of process_nicer_obsid
+process_nustar_obsids = _make_parallel(process_nustar_obsid)
