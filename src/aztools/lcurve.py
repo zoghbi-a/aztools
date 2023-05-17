@@ -614,6 +614,8 @@ class LCurve:
         dcoh  = (2/fqm)**0.5 * (1 - coh)/np.sqrt(coh)
         coh_e = coh * (fqm**-0.5) * ((2*nn2*nn2*fqm)/(np.abs(crss)**2 - nn2)**2 +
                 (xnse**2/(xpsd-xnse)**2) + (ynse**2/(ypsd-ynse)**2) + (fqm*dcoh/coh**2))**0.5
+        coh_e[(coh - coh_e) < 0] = coh[(coh - coh_e) < 0]
+
 
         # rms spectrum from psd; error from eq. 14 in Uttley+14 #
         # the rms here is in absolute not fractional units
