@@ -5,7 +5,7 @@ from typing import Union
 
 import numpy as np
 
-from .misc import group_array
+from .misc import group_array, read_fits_lcurve
 
 
 class LCurve:
@@ -14,6 +14,7 @@ class LCurve:
     def __init__(self,
                  tarr: np.ndarray,
                  rarr: np.ndarray,
+                 rerr: np.ndarray = None,
                  **kwargs):
         """Initialize LCurve with tarr, rarr and optional rerr, fexp
 
@@ -23,11 +24,11 @@ class LCurve:
             An array containing the time axis
         rarr: np.ndarray
             An array containing the count rate
+        rerr: np.ndarray
+            An array containing the measurement errors.
             
         Keywords
         --------
-        rerr: np.ndarray
-            An array containing the measurement errors.
         deltat: float
             Time sampling. If not given, dt = min(diff(t))
         fexp: np.ndarray
@@ -36,7 +37,6 @@ class LCurve:
         """
 
         # keyword arguments
-        rerr = kwargs.get('rerr', None)
         deltat = kwargs.get('deltat', None)
         fexp = kwargs.get('fexp')
 
@@ -667,3 +667,142 @@ class LCurve:
                 'raw': raw, 'rms': np.array([rms, rmse]), 'cov': np.array([cov, cove])}
 
         return freq, lag, lag_e, extra
+
+
+    @staticmethod
+    def read_pn_lcurve(fits_file, **kwargs):
+        """Read pn lcurve fits file.
+            This sets values relevant to PN and calls @misc.read_fits_lcurve
+
+        Parameters
+        ----------
+        fits_file: str
+            The name of the files file
+
+        Keywords
+        --------
+        See @misc.read_fits_lcurve
+
+
+        Return
+        ------
+        LCurve object
+        """
+
+        # set values relevant to XMM-PN files #
+        kwargs.setdefault('min_exp' , 0.7)
+        kwargs.setdefault('gti_tbl' , 2)
+
+        data, deltat = read_fits_lcurve(fits_file, **kwargs)
+        return LCurve(data[0], data[1], rerr=data[2], deltat=deltat, fexp=data[3])
+
+
+    @staticmethod
+    def read_pca_lcurve(fits_file, **kwargs):
+        """Read pca lcurve fits file.
+            This sets values relevant to PCA and calls @misc.read_fits_lcurve
+
+        Parameters
+        ----------
+        fits_file: str
+            The name of the files file
+
+        Keywords
+        --------
+        See @misc.read_fits_lcurve
+
+
+        Return
+        ------
+        LCurve object
+        """
+
+        # set values relevant to PCA files #
+        kwargs.setdefault('min_exp' , 0.99)
+        kwargs.setdefault('gti_tbl' , 'STDGTI')
+
+        data, deltat = read_fits_lcurve(fits_file, **kwargs)
+        return LCurve(data[0], data[1], rerr=data[2], deltat=deltat, fexp=data[3])
+
+
+    @staticmethod
+    def read_nu_lcurve(fits_file, **kwargs):
+        """Read nustar lcurve fits file.
+            This sets values relevant to NUSTAR and calls @misc.read_fits_lcurve
+
+        Parameters
+        ----------
+        fits_file: str
+            The name of the files file.
+
+        Keywords
+        --------
+        See @misc.read_fits_lcurve
+
+
+        Return
+        ------
+        LCurve object
+        """
+
+        # set values relevant to NUSTAR files #
+        kwargs.setdefault('min_exp' , 0.1)
+        kwargs.setdefault('gti_tbl' , 'GTI')
+        kwargs.setdefault('gti_skip', 3.0)
+
+        data, deltat = read_fits_lcurve(fits_file, **kwargs)
+        return LCurve(data[0], data[1], rerr=data[2], deltat=deltat, fexp=data[3])
+
+
+    @staticmethod
+    def read_xis_lcurve(fits_file, **kwargs):
+        """Read suzaku xis lcurve fits file.
+            This sets values relevant to Suzaku XIS and calls @misc.read_fits_lcurve
+
+        Parameters
+        ----------
+        fits_file: str
+            The name of the files file.
+
+        Keywords
+        --------
+        See @misc.read_fits_lcurve
+
+
+        Return
+        ------
+        LCurve object
+        """
+
+        # set values relevant to XIS files #
+        kwargs.setdefault('min_exp' , 0.1)
+        kwargs.setdefault('gti_tbl' , 'GTI')
+
+        data, deltat = read_fits_lcurve(fits_file, **kwargs)
+        return LCurve(data[0], data[1], rerr=data[2], deltat=deltat, fexp=data[3])
+
+
+    @staticmethod
+    def read_ni_lcurve(fits_file, **kwargs):
+        """Read nicer lcurve fits file.
+            This sets values relevant to NICER and calls @misc.read_fits_lcurve
+
+        Parameters
+        ----------
+        fits_file: str
+            The name of the files file.
+
+        Keywords:
+        See @misc.read_fits_lcurve
+
+
+        Returns:
+            LCurve object
+        """
+
+        # set values relevant to NICER files #
+        kwargs.setdefault('min_exp' , 0.99)
+        kwargs.setdefault('gti_tbl' , 'GTI')
+
+        data, deltat = read_fits_lcurve(fits_file, **kwargs)
+        return LCurve(data[0], data[1], rerr=data[2], deltat=deltat, fexp=data[3])
