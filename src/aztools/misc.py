@@ -1,6 +1,8 @@
 """Miscellaneous Utilities"""
 
 import os
+import re
+import subprocess
 from itertools import groupby
 from typing import Union
 
@@ -539,3 +541,32 @@ def read_fits_lcurve(fits_file: str, **kwargs):
         ldata = ldata[:, igood]
 
     return ldata, deltat
+
+
+def run_cmd_line_tool(cmd: str, logfile: str, env: dict = None, shell: bool = True):
+    """Run a command line tool
+    
+    Parameters
+    ----------
+    cmd: str
+        The command to be run where the parameters are in the string
+    logfile: str
+        The name of the output log file in case the task fails
+    env: dict
+        Dictionary of environment variables to be used by the task
+    
+    """
+    this_env = os.environ.copy()
+    if env is not None:
+        this_env.update(**env)
+
+    # use re.split to handle things like: par="1 2";
+    cmd_list = re.split(r'''\s(?=(?:[^'"]|'[^']*'|"[^"]*")*$)''', cmd)
+    with subprocess.Popen(cmd_list, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, env=this_env, shell=shell) as proc:
+        out, _ = proc.communicate()
+        out = out.decode()
+        if proc.returncode != 0:
+            with open(logfile, 'w', encoding='utf8') as filep:
+                filep.write(out)
+            raise RuntimeError(f'ERROR running {cmd.split(" ")[0]}; Writing log to {logfile}')
