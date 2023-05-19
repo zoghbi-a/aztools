@@ -592,7 +592,9 @@ def run_cmd_line_tool(cmd: str,
         error  = str(exception)
         returncode = -1
 
-    full_output = f'{output}\n\nERROR:\n{error}'
+    full_output = output
+    if error != '':
+        full_output += f'\n\nERROR:\n{error}'
     if logfile is not None:
         with open(logfile, 'w', encoding='utf8') as filep:
             filep.write(full_output)

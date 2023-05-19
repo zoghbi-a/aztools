@@ -312,7 +312,8 @@ def process_xmm_obsid(obsid: str, **kwargs):
 def filter_xmm_obsid(obsid: str, **kwargs):
     """Filter XMM pn or mos obsid with xmm sas
     
-    Run from top level containting obsid folder
+    Run from top level containting obsid folder.
+    By default, do standard filtering; R<0.4 in pn or R<0.35 for mos
     
     Parameters
     ----------
@@ -323,8 +324,6 @@ def filter_xmm_obsid(obsid: str, **kwargs):
     --------
     instr: str
         Instrument or instrument mode: pn|mos1|mos2
-    std: bool
-        If True, do standard filtering
     gtiexpr: str
         GTI selection expression if selection based on rate is not
         desired. It should be of the form: TIME < VAL or TIME IN [LOW:HI]
@@ -356,7 +355,7 @@ def filter_xmm_obsid(obsid: str, **kwargs):
         os.system(f'mkdir -p {obsid}/{instr}')
         os.chdir(f'{obsid}/{instr}')
         evt = f'../odf/{instr}.fits'
-        filtered_evt = f'../odf/{instr}_filtered.fits'
+        filtered_evt = f'{instr}_filtered.fits'
         if not os.path.exists(evt):
             raise ValueError(f'No {instr}.fits found under odf; run process_xmm_obsid')
 
@@ -408,6 +407,117 @@ def filter_xmm_obsid(obsid: str, **kwargs):
 
         os.chdir(cwd)
         print(f'{filtered_evt} created successfully')
+
+    except Exception as exception: # pylint: disable=broad-exception-caught
+        os.chdir(cwd)
+        raise exception
+
+
+def extract_xmm_spec(obsid: str, **kwargs):
+    """Extract XMM pn or mos spectrum with xmm sas
+    
+    Run from top level containting obsid folder
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    instr: str
+        Instrument or instrument mode: pn|mos1|mos2
+    regfile: str
+        name of region file. It should under: obsid/{instr}/; where instr
+        is pn|mos1|mos2
+    extra_expr: str
+        Extra filtering expression for evselect. e.g '&&gti("gtifile.gti",TIME)'.
+        Note the &&.
+    genrsp: bool
+        Generate rmf and arf files.
+    irun: int
+        Run number if in parallel. Can be used to name outputs as spec_{irun}.*
+    
+    """
+    # get keywords
+    instr = kwargs.pop('instr', 'pn')
+    regfile = kwargs.pop('regfile', 'ds9.reg')
+    extra_expr = kwargs.pop('extra_expr', '')
+    genrsp = kwargs.pop('genrsp', True)
+    irun = kwargs.pop('irin', None)
+
+    # check keywords
+    if instr not in ['pn', 'mos1', 'mos2']:
+        raise ValueError('instr need to be one of pn|mo1|mos2')
+
+    if extra_expr != '' and '&&' not in extra_expr and '||' not in extra_expr:
+        raise ValueError(('extra_expr has to contrain && or || '
+                          'to connect to other expression'))
+
+    out = 'spec'
+    if irun is not None:
+        out += f'_{irun}'
+    cwd = os.getcwd()
+
+    try:
+        os.system(f'mkdir -p {obsid}/{instr}/spec')
+        os.chdir(f'{obsid}/{instr}/spec')
+        filtered_evt = f'../{instr}_filtered.fits'
+        if not os.path.exists(filtered_evt):
+            raise FileNotFoundError(f'{obsid}/{instr}/{instr}_filtered.fits not found')
+
+        # read region file; expecting obsid/instr/ds9.reg
+        regfile = f'../{regfile}'
+        if not os.path.exists(regfile):
+            raise FileNotFoundError(f'{regfile} not found.')
+        selector = '(X,Y) IN '
+        regions = ['', '']
+        with open(regfile, encoding='utf8') as filep:
+            for line in filep.readlines():
+                if '(' in line:
+                    idx = 1 if 'back' in line else 0
+                    reg = f'{selector} {line.split("#")[0].rstrip()}'
+                    regions[idx] += '' if regions[idx] == '' else ' || '
+                    regions[idx] += f'{selector} {line.split("#")[0].rstrip()}'
+
+        env = {
+            'SAS_ODF': f'{cwd}/{obsid}/odf',
+            'SAS_CCF': f'{cwd}/{obsid}/odf/ccf.cif',
+        }
+
+
+        # extract src and bgd spectra #
+        maxchan = 20479 if instr == 'pn' else 11999
+        labels = ['pha', 'bgd']
+        for lab,reg in zip(labels, regions):
+            cmd = (f'evselect table={filtered_evt} spectrumset={out}.{lab} '
+                   f'expression="{reg}{extra_expr}" '
+                   'energycolumn=PI spectralbinsize=5 withspecranges=yes '
+                   f'specchannelmin=0 specchannelmax={maxchan}'
+            )
+            misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}.log')
+            # backscale
+            cmd = f'backscale spectrumset={out}.{lab} badpixlocation={filtered_evt}'
+            misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}_backscale.log')
+
+        if genrsp:
+            # response
+            cmd = f'rmfgen spectrumset={out}.pha rmfset={out}.rmf'
+            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_rmf.log')
+
+            # arf
+            cmd = (f'arfgen spectrumset={out}.pha arfset={out}.arf withrmfset=yes '
+                   f'rmfset={out}.rmf badpixlocation={filtered_evt} detmaptype=psf')
+            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_arf.log')
+
+            # group spectra
+            cmd = (f'specgroup spectrumset={out}.pha rmfset={out}.rmf '
+                   f'backgndset={out}.bgd arfset={out}.arf groupedset={out}.grp '
+                   'minSN=6 oversample=3')
+            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_grp.log')
+
+        os.chdir(cwd)
+        print(f'spectra {out}* created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)

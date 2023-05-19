@@ -139,3 +139,5 @@ dask-worker-space/
 
 # tmp directory
 tmp/
+*png
+
