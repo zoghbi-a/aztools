@@ -46,6 +46,8 @@ def _make_parallel(func, nproc=4):
 def process_nicer_obsid(obsid: str, **kwargs):
     """Process NICER obsid with nicerl2
     
+    Run from top level containting obsid folder
+    
     Parameters
     ----------
     obsid: str
@@ -95,6 +97,8 @@ process_nicer_obsids = _make_parallel(process_nicer_obsid)
 
 def process_nustar_obsid(obsid: str, **kwargs):
     """Process NuSTAR obsid with nupipeline
+    
+    Run from top level containting obsid folder
     
     Parameters
     ----------
@@ -148,6 +152,8 @@ process_nustar_obsids = _make_parallel(process_nustar_obsid)
 
 def process_suzaku_obsid(obsid: str, **kwargs):
     """Process SUZAKU XIS obsid with aepipeline
+    
+    Run from top level containting obsid folder
     
     Parameters
     ----------
@@ -203,6 +209,8 @@ process_suzaku_obsids = _make_parallel(process_suzaku_obsid)
 def process_xmm_obsid(obsid: str, **kwargs):
     """Process XMM obsid with xmm sas
     
+    Run from top level containting obsid folder
+    
     Parameters
     ----------
     obsid: str
@@ -214,14 +222,13 @@ def process_xmm_obsid(obsid: str, **kwargs):
         Instrument or instrument mode: pn|mos|rgs|om
     Any parameters to be passed to the reduction pipeline
     
-    Return
-    ------
-    0 if succesful, and a heasoft error code otherwise
     
     """
 
     # defaults
     instr = kwargs.pop('instr', 'pn')
+    if instr not in ['pn', 'mos', 'rgs', 'om']:
+        raise ValueError('instr need to be one of pn|mos|rgs|om')
     cwd = os.getcwd()
 
     try:
@@ -296,6 +303,111 @@ def process_xmm_obsid(obsid: str, **kwargs):
             print('rgs spectra created successfully')
 
         os.chdir(cwd)
+
+    except Exception as exception: # pylint: disable=broad-exception-caught
+        os.chdir(cwd)
+        raise exception
+
+
+def filter_xmm_obsid(obsid: str, **kwargs):
+    """Filter XMM pn or mos obsid with xmm sas
+    
+    Run from top level containting obsid folder
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    instr: str
+        Instrument or instrument mode: pn|mos1|mos2
+    std: bool
+        If True, do standard filtering
+    gtiexpr: str
+        GTI selection expression if selection based on rate is not
+        desired. It should be of the form: TIME < VAL or TIME IN [LOW:HI]
+    extra_expr: str
+        Extra filtering expression for evselect. e.g '&&(PI>4000)'.
+        Note the &&.
+    barycorr: bool
+        Apply barycenter correction to the filtered event file
+    region: bool
+        If True, create an image from the filtered file and launch
+        ds9 to create a region file
+    
+    """
+    instr = kwargs.pop('instr', 'pn')
+    gtiexpr = kwargs.pop('gtiexpr', None)
+    barycorr = kwargs.pop('barycorr', False)
+    extra_expr = kwargs.pop('extra_expr', '')
+    region = kwargs.pop('region', False)
+    if extra_expr != '' and '&&' not in extra_expr and '||' not in extra_expr:
+        raise ValueError(('extra_expr has to contrain && or || '
+                          'to connect to other expression'))
+
+
+    if instr not in ['pn', 'mos1', 'mos2']:
+        raise ValueError('instr need to be one of pn|mo1|mos2')
+    cwd = os.getcwd()
+
+    try:
+        os.system(f'mkdir -p {obsid}/{instr}')
+        os.chdir(f'{obsid}/{instr}')
+        evt = f'../odf/{instr}.fits'
+        filtered_evt = f'../odf/{instr}_filtered.fits'
+        if not os.path.exists(evt):
+            raise ValueError(f'No {instr}.fits found under odf; run process_xmm_obsid')
+
+        # background flare filtering #
+        foptions = {
+            'pn' : ['IN [10000:12000]', 'EP', 4,  0.4],
+            'mos': ['> 10000'         , 'EM', 12, 0.35]
+        }
+
+        cmd = (
+            f"evselect table={evt}:EVENTS withrateset=yes rateset=tmp.rate " 
+            f"expression='(PI {foptions[instr[:3]][0]})&&(PATTERN==0)&&"
+            f"#XMMEA_{foptions[instr[:3]][1]}' "
+            "makeratecolumn=yes maketimecolumn=yes timebinsize=100"
+        )
+        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_evselect.log')
+
+        # generate GTI
+        expr = gtiexpr or f'RATE < {foptions[instr[:3]][3]}'
+        cmd = ('tabgtigen table=tmp.rate gtiset=tmp.gti '
+               f'expression="RATE<{foptions[instr[:3]][3]}"')
+        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_tabgtigen.log')
+
+        # apply GTI
+        expr = ('gti(tmp.gti,TIME)&&(PI IN [200:12000])&&(FLAG==0)&&'
+                f'(PATTERN<={foptions[instr[:3]][2]}){extra_expr}')
+        cmd = (f"evselect table={evt}:EVENTS withfilteredset=yes "
+               f"filteredset={filtered_evt} expression='{expr}'")
+        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_evselect2.log')
+
+        # barycenter corrections? #
+        if barycorr:
+            os.system(f'cp {filtered_evt} {instr}_filtered_nobary.fits'.format(instr))
+            cmd = f'barycen table={filtered_evt}:EVENTS'
+            misc.run_cmd_line_tool(cmd, logfile='filter_xmm_barycen.log')
+
+        # region?
+        if region:
+            # create an image
+            cmd = (f"evselect table={filtered_evt}:EVENTS withimageset=yes "
+                   "imageset=tmp.img xcolumn=X ycolumn=Y")
+            misc.run_cmd_line_tool(cmd, logfile='filter_xmm_image.log')
+
+            # call ds9
+            print('launching ds9')
+            ret = os.system('ds9 tmp.img -log -zoom 2 -cmap heat')
+            if ret != 0:
+                raise RuntimeError('Failed launching ds9')
+
+        os.chdir(cwd)
+        print(f'{filtered_evt} created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
