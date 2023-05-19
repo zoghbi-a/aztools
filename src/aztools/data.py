@@ -222,69 +222,81 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
     # defaults
     instr = kwargs.pop('instr', 'pn')
+    cwd = os.getcwd()
 
-    # preparation
-    os.chdir(obsid)
-    if os.path.exists('ODF'):
-        os.system('mv ODF odf')
-    os.chdir('odf')
-    env = {'SAS_ODF': os.getcwd()}
+    try:
+        # preparation
+        os.chdir(obsid)
+        if os.path.exists('ODF'):
+            os.system('mv ODF odf')
+        os.chdir('odf')
+        env = {'SAS_ODF': os.getcwd()}
 
-    if not os.path.exists('ccf.cif'):
-        if len(glob.glob('*gz')) > 0:
-            os.system('gzip -d *gz')
-        cmd = 'cifbuild withccfpath=no analysisdate=now category=XMMCCF fullpath=yes'
-        misc.run_cmd_line_tool(cmd, 'processing_xmm_cifbuild.log', env)
+        if not os.path.exists('ccf.cif'):
+            if len(glob.glob('*gz')) > 0:
+                os.system('gzip -d *gz')
+            cmd = 'cifbuild withccfpath=no analysisdate=now category=XMMCCF fullpath=yes'
+            misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_cifbuild.log')
 
+        env['SAS_CCF'] = f'{os.getcwd()}/ccf.cif'
+
+        if len(glob.glob('*.SAS')) > 0:
+            os.system('rm *.SAS')
         cmd = f'odfingest odfdir={os.getcwd()} outdir={os.getcwd()}'
-        misc.run_cmd_line_tool(cmd, 'processing_xmm_odfingest.log', env)
+        misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_odfingest.log')
 
-    env['SAS_CCF'] = f'{os.getcwd()}/ccf.cif'
 
-    # prepare the command
-    if instr == 'pn':
-        cmd = 'epchain'
-    elif instr == 'mos':
-        cmd = 'emchain'
-    elif instr == 'rgs':
-        kwargs.setdefault('order', '"1 2"')
-        kwargs.setdefault('bkgcorrect', 'no')
-        kwargs.setdefault('withmlambdacolumn', 'yes')
-        cmd = 'rgsproc'
-    elif instr == 'om':
-        cmd = 'omfchain'
-    else:
-        raise ValueError('instr needs to be pn|om|rgs|om')
+        # prepare the command
+        if instr == 'pn':
+            cmd = 'epchain'
+        elif instr == 'mos':
+            cmd = 'emchain'
+        elif instr == 'rgs':
+            kwargs.setdefault('orders', '"1 2"')
+            kwargs.setdefault('bkgcorrect', 'no')
+            kwargs.setdefault('withmlambdacolumn', 'yes')
+            cmd = 'rgsproc'
+        elif instr == 'om':
+            cmd = 'omfchain'
+        else:
+            raise ValueError('instr needs to be pn|om|rgs|om')
 
-    # the following with raise RuntimeError if the task fails
-    cmd = f'{cmd} {" ".join([f"{par}={val}" for par,val in kwargs.items()])}'
-    misc.run_cmd_line_tool(cmd, f'processing_xmm_{instr}.log', env)
+        # the following with raise RuntimeError if the task fails
+        cmd = f'{cmd} {" ".join([f"{par}={val}" for par,val in kwargs.items()])}'
+        misc.run_cmd_line_tool(cmd, env, logfile=f'processing_xmm_{instr}.log')
 
-    # post run extra tasks
-    if instr == 'pn':
-        evt = glob.glob('*EVL*')
-        if len(evt) != 1:
-            raise ValueError('Found >1 event files for pn')
-        os.system(f'mv {evt[0]} {instr}.fits')
-        print(f'{instr}.fits created successfully')
-
-    if instr == 'mos':
-        for subi in [1, 2]:
-            evt = glob.glob(f'*M{subi}*EVL*')
+        # post run extra tasks
+        if instr == 'pn':
+            evt = glob.glob('*EVL*')
             if len(evt) != 1:
-                raise ValueError(f'Found >1 event files for mos-{subi}')
-            os.system(f'mv {evt[0]} {instr}{subi}.fits')
-            print(f'{instr}{subi}.fits created successfully')
+                raise ValueError('Found >1 event files for pn')
+            os.system(f'mv {evt[0]} {instr}.fits')
+            print(f'{instr}.fits created successfully')
 
-    if instr == 'rgs':
-        os.system('cp *R1*SRSPEC1* spec_r1.src')
-        os.system('cp *R2*SRSPEC1* spec_r2.src')
-        os.system('cp *R1*BGSPEC1* spec_r1.bgd')
-        os.system('cp *R2*BGSPEC1* spec_r2.bgd')
-        os.system('cp *R1*RSPMAT1* spec_r1.rsp')
-        os.system('cp *R2*RSPMAT1* spec_r2.rsp')
+        if instr == 'mos':
+            for subi in [1, 2]:
+                evt = glob.glob(f'*M{subi}*MIEVL*')
+                if len(evt) != 1:
+                    raise ValueError(f'Found >1 event files for mos-{subi}')
+                os.system(f'mv {evt[0]} {instr}{subi}.fits')
+                print(f'{instr}{subi}.fits created successfully')
 
-        cmd = ('rgscombine pha="spec_r1.src spec_r2.src" bkg="spec_r1.bgd spec_r2.bgd" '
-               'rmf="spec_r1.rsp spec_r2.rsp" filepha="spec_rgs.src" filebkg="spec_rgs.bgd" '
-               'filermf="spec_rgs.rsp"')
-        misc.run_cmd_line_tool(cmd, 'processing_xmm_rgscombine.log', env)
+        if instr == 'rgs':
+            os.system('cp *R1*SRSPEC1* spec_r1.src')
+            os.system('cp *R2*SRSPEC1* spec_r2.src')
+            os.system('cp *R1*BGSPEC1* spec_r1.bgd')
+            os.system('cp *R2*BGSPEC1* spec_r2.bgd')
+            os.system('cp *R1*RSPMAT1* spec_r1.rsp')
+            os.system('cp *R2*RSPMAT1* spec_r2.rsp')
+
+            cmd = ('rgscombine pha="spec_r1.src spec_r2.src" bkg="spec_r1.bgd spec_r2.bgd" '
+                   'rmf="spec_r1.rsp spec_r2.rsp" filepha="spec_rgs.src" filebkg="spec_rgs.bgd" '
+                   'filermf="spec_rgs.rsp"')
+            misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_rgscombine.log')
+            print('rgs spectra created successfully')
+
+        os.chdir(cwd)
+
+    except Exception as exception: # pylint: disable=broad-exception-caught
+        os.chdir(cwd)
+        raise exception

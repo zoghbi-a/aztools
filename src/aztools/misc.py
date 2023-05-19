@@ -543,30 +543,64 @@ def read_fits_lcurve(fits_file: str, **kwargs):
     return ldata, deltat
 
 
-def run_cmd_line_tool(cmd: str, logfile: str, env: dict = None, shell: bool = True):
+def run_cmd_line_tool(cmd: str,
+                      env: dict = None,
+                      allow_fail: bool = True,
+                      logfile: str = None):
     """Run a command line tool
     
     Parameters
     ----------
     cmd: str
-        The command to be run where the parameters are in the string
-    logfile: str
-        The name of the output log file in case the task fails
+        The command strign to be run where the parameters are in the string
     env: dict
         Dictionary of environment variables to be used by the task
+    allow_fail: bool
+        If True and the task fails, return without raising an exception
+    logfile: str
+        File name to long output/error to. If None, no logs are produced
     
     """
-    this_env = os.environ.copy()
-    if env is not None:
-        this_env.update(**env)
 
-    # use re.split to handle things like: par="1 2";
-    cmd_list = re.split(r'''\s(?=(?:[^'"]|'[^']*'|"[^"]*")*$)''', cmd)
-    with subprocess.Popen(cmd_list, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, env=this_env, shell=shell) as proc:
-        out, _ = proc.communicate()
-        out = out.decode()
-        if proc.returncode != 0:
-            with open(logfile, 'w', encoding='utf8') as filep:
-                filep.write(out)
-            raise RuntimeError(f'ERROR running {cmd.split(" ")[0]}; Writing log to {logfile}')
+    run_env = os.environ.copy()
+    if env is not None:
+        run_env.update(**env)
+
+    output = ''
+    try:
+        # pylint: disable=consider-using-f-string
+        cmd_list = [cmd.split()[0]] + ['{}={}'.format(par,val.replace('"','').replace("'",''))
+                    for par,val in re.findall(r'(\w+)=(["\'].*?["\']|\S+)', cmd)]
+
+        with subprocess.Popen(cmd_list, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, env=run_env) as proc:
+            output, error = proc.communicate()
+
+
+        # Decode the output and error messages
+        output = output.decode().strip()
+        error = error.decode().strip()
+        returncode = proc.returncode
+
+        if returncode != 0:
+            raise RuntimeError(error)
+
+    except Exception as exception: # pylint: disable=broad-exception-caught
+        if allow_fail:
+            raise exception
+
+        error  = str(exception)
+        returncode = -1
+
+    full_output = f'{output}\n\nERROR:\n{error}'
+    if logfile is not None:
+        with open(logfile, 'w', encoding='utf8') as filep:
+            filep.write(full_output)
+
+    result = {
+        'output': output,
+        'error': error,
+        'returncode': returncode,
+        'full_output': full_output
+    }
+    return result
