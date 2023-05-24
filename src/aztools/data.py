@@ -6,6 +6,7 @@ import os
 from multiprocessing import Pool
 
 import heasoftpy as hsp
+import numpy as np
 
 from . import misc
 
@@ -313,6 +314,7 @@ def filter_xmm_obsid(obsid: str, **kwargs):
     """Filter XMM pn or mos obsid with xmm sas
     
     Run from top level containting obsid folder.
+    This assumes @misc.process_xmm_obsid was called first.
     By default, do standard filtering; R<0.4 in pn or R<0.35 for mos
     
     Parameters
@@ -417,6 +419,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
     """Extract XMM pn or mos spectrum with xmm sas
     
     Run from top level containting obsid folder
+    This assumes @misc.filter_xmm_obsid was called first.
     
     Parameters
     ----------
@@ -429,7 +432,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
         Instrument or instrument mode: pn|mos1|mos2
     regfile: str
         name of region file. It should under: obsid/{instr}/; where instr
-        is pn|mos1|mos2
+        is pn|mos1|mos2. Default is ds9.reg.
     extra_expr: str
         Extra filtering expression for evselect. e.g '&&gti("gtifile.gti",TIME)'.
         Note the &&.
@@ -515,6 +518,132 @@ def extract_xmm_spec(obsid: str, **kwargs):
                    f'backgndset={out}.bgd arfset={out}.arf groupedset={out}.grp '
                    'minSN=6 oversample=3')
             misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_grp.log')
+
+        os.chdir(cwd)
+        print(f'spectra {out}* created successfully')
+
+    except Exception as exception: # pylint: disable=broad-exception-caught
+        os.chdir(cwd)
+        raise exception
+
+
+def extract_xmm_lc(obsid: str, **kwargs):
+    """Extract XMM pn or mos light curves with xmm sas
+    
+    Run from top level containting obsid folder
+    This assumes @misc.filter_xmm_obsid was called first.
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    instr: str
+        Instrument or instrument mode: pn|mos1|mos2
+    ebins: str
+        Space-separated string of the energy bin boundaries in keV. Default is '0.3 10'
+    tbin: float
+        The time bin, negative means 2**tbin
+    regfile: str
+        name of region file. It should under: obsid/{instr}/; where instr
+        is pn|mos1|mos2. Default is ds9.reg.
+    extra_expr: str
+        Extra filtering expression for evselect. e.g '&&gti("gtifile.gti",TIME)'.
+        Note the &&.
+    lccorr: bool
+        Run epiclccorr. Default is True.
+    outdir: str
+        output folder name under {obsid}/{instr}/. Default is lc.
+    irun: int
+        Run number if in parallel. Can be used to name outputs as spec_{irun}.*
+    
+    """
+    # get keywords
+    instr = kwargs.pop('instr', 'pn')
+    ebins = kwargs.pop('ebins', '0.3 10')
+    tbin = kwargs.pop('tbin', 1.0)
+    regfile = kwargs.pop('regfile', 'ds9.reg')
+    extra_expr = kwargs.pop('extra_expr', '')
+    lccorr = kwargs.pop('lccorr', True)
+    outdir = kwargs.pop('outdir', 'lc')
+    irun = kwargs.pop('irin', None)
+
+    # check keywords
+    if instr not in ['pn', 'mos1', 'mos2']:
+        raise ValueError('instr need to be one of pn|mo1|mos2')
+
+    ebins = np.array(ebins.split(), np.double) * 1000
+    ebins = [list(ebin) for ebin in zip(ebins[:-1], ebins[1:])]
+
+    if tbin < 0:
+        tbin = 2**tbin
+
+    if extra_expr != '' and '&&' not in extra_expr and '||' not in extra_expr:
+        raise ValueError(('extra_expr has to contrain && or || '
+                          'to connect to other expression'))
+
+    out = f'lc_{tbin:03g}'
+    if irun is not None:
+        out += f'_{irun}'
+    cwd = os.getcwd()
+
+    try:
+        os.system(f'mkdir -p {obsid}/{instr}/{outdir}')
+        os.chdir(f'{obsid}/{instr}/{outdir}')
+        filtered_evt = f'../{instr}_filtered.fits'
+        if not os.path.exists(filtered_evt):
+            raise FileNotFoundError(f'{obsid}/{instr}/{instr}_filtered.fits not found')
+
+        # read region file; expecting obsid/instr/ds9.reg
+        regfile = f'../{regfile}'
+        if not os.path.exists(regfile):
+            raise FileNotFoundError(f'{regfile} not found.')
+        selector = '(X,Y) IN '
+        regions = ['', '']
+        with open(regfile, encoding='utf8') as filep:
+            for line in filep.readlines():
+                if '(' in line:
+                    idx = 1 if 'back' in line else 0
+                    regions[idx] += '' if regions[idx] == '' else ' || '
+                    regions[idx] += f'{selector} {line.split("#")[0].rstrip()}'
+
+        env = {
+            'SAS_ODF': f'{cwd}/{obsid}/odf',
+            'SAS_CCF': f'{cwd}/{obsid}/odf/ccf.cif',
+        }
+
+
+        # extract src and bgd spectra #
+        for ibin,ebin in enumerate(ebins):
+
+            # names #
+            src = f'{out}_e{ibin+1}__s.fits'
+            bgd = f'{out}_e{ibin+1}__b.fits'
+            smb = f'{out}_e{ibin+1}.fits'
+
+            # extract src lc
+            expr = f'PI IN [{ebin[0]}:{ebin[1]}) && {regions[0]} {extra_expr}'
+            cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
+                   f'rateset={src} expression="{expr}" makeratecolumn=yes '
+                   f'maketimecolumn=yes timebinsize={tbin}')
+            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_src.log')
+
+
+            # extract bgd lc
+            expr = f'PI IN [{ebin[0]}:{ebin[1]}) && {regions[1]} {extra_expr}'
+            cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
+                   f'rateset={bgd} expression="{expr}" makeratecolumn=yes '
+                   f'maketimecolumn=yes timebinsize={tbin}')
+            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_bgd.log')
+
+
+            # correct lc
+            if lccorr:
+                cmd = (f'epiclccorr srctslist={src} eventlist={filtered_evt} outset={smb} '
+                       f'withbkgset=yes bkgtslist={bgd} applyabsolutecorrections=no')
+                misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_corr.log')
 
         os.chdir(cwd)
         print(f'spectra {out}* created successfully')
