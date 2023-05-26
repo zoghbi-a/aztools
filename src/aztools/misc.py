@@ -507,6 +507,8 @@ def read_fits_lcurve(fits_file: str, **kwargs):
         deltat = filep[rate_tbl].header.get(dt_key, None)
         if deltat is not None:
             tstart += deltat/2
+        if time_0 != 0 and tstart/time_0 < 1e5:
+            time_0 = 0.0
 
         # if the time-axis offset, correct it #
         if tstart/ldata[0, 1] > 1e5:

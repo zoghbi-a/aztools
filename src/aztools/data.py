@@ -7,6 +7,7 @@ from multiprocessing import Pool
 
 import heasoftpy as hsp
 import numpy as np
+from astropy.io import fits
 
 from . import misc
 
@@ -447,7 +448,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
     regfile = kwargs.pop('regfile', 'ds9.reg')
     extra_expr = kwargs.pop('extra_expr', '')
     genrsp = kwargs.pop('genrsp', True)
-    irun = kwargs.pop('irin', None)
+    irun = kwargs.pop('irun', None)
 
     # check keywords
     if instr not in ['pn', 'mos1', 'mos2']:
@@ -457,9 +458,9 @@ def extract_xmm_spec(obsid: str, **kwargs):
         raise ValueError(('extra_expr has to contrain && or || '
                           'to connect to other expression'))
 
-    out = 'spec'
+    prefix = 'spec'
     if irun is not None:
-        out += f'_{irun}'
+        prefix += f'_{irun}'
     cwd = os.getcwd()
 
     try:
@@ -493,34 +494,34 @@ def extract_xmm_spec(obsid: str, **kwargs):
         maxchan = 20479 if instr == 'pn' else 11999
         labels = ['pha', 'bgd']
         for lab,reg in zip(labels, regions):
-            cmd = (f'evselect table={filtered_evt} spectrumset={out}.{lab} '
+            cmd = (f'evselect table={filtered_evt} spectrumset={prefix}.{lab} '
                    f'expression="{reg}{extra_expr}" '
                    'energycolumn=PI spectralbinsize=5 withspecranges=yes '
                    f'specchannelmin=0 specchannelmax={maxchan}'
             )
             misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}.log')
             # backscale
-            cmd = f'backscale spectrumset={out}.{lab} badpixlocation={filtered_evt}'
+            cmd = f'backscale spectrumset={prefix}.{lab} badpixlocation={filtered_evt}'
             misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}_backscale.log')
 
         if genrsp:
             # response
-            cmd = f'rmfgen spectrumset={out}.pha rmfset={out}.rmf'
+            cmd = f'rmfgen spectrumset={prefix}.pha rmfset={prefix}.rmf'
             misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_rmf.log')
 
             # arf
-            cmd = (f'arfgen spectrumset={out}.pha arfset={out}.arf withrmfset=yes '
-                   f'rmfset={out}.rmf badpixlocation={filtered_evt} detmaptype=psf')
+            cmd = (f'arfgen spectrumset={prefix}.pha arfset={prefix}.arf withrmfset=yes '
+                   f'rmfset={prefix}.rmf badpixlocation={filtered_evt} detmaptype=psf')
             misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_arf.log')
 
             # group spectra
-            cmd = (f'specgroup spectrumset={out}.pha rmfset={out}.rmf '
-                   f'backgndset={out}.bgd arfset={out}.arf groupedset={out}.grp '
+            cmd = (f'specgroup spectrumset={prefix}.pha rmfset={prefix}.rmf '
+                   f'backgndset={prefix}.bgd arfset={prefix}.arf groupedset={prefix}.grp '
                    'minSN=6 oversample=3')
             misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_grp.log')
 
         os.chdir(cwd)
-        print(f'spectra {out}* created successfully')
+        print(f'spectra {prefix}* created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
@@ -584,9 +585,9 @@ def extract_xmm_lc(obsid: str, **kwargs):
         raise ValueError(('extra_expr has to contrain && or || '
                           'to connect to other expression'))
 
-    out = f'lc_{tbin:03g}'
+    prefix = f'lc_{tbin:03g}'
     if irun is not None:
-        out += f'_{irun}'
+        prefix += f'_{irun}'
     cwd = os.getcwd()
 
     try:
@@ -619,9 +620,9 @@ def extract_xmm_lc(obsid: str, **kwargs):
         for ibin,ebin in enumerate(ebins):
 
             # names #
-            src = f'{out}_e{ibin+1}__s.fits'
-            bgd = f'{out}_e{ibin+1}__b.fits'
-            smb = f'{out}_e{ibin+1}.fits'
+            src = f'{prefix}_e{ibin+1}__s.fits'
+            bgd = f'{prefix}_e{ibin+1}__b.fits'
+            smb = f'{prefix}_e{ibin+1}.fits'
 
             # extract src lc
             expr = f'PI IN [{ebin[0]}:{ebin[1]}) && {regions[0]} {extra_expr}'
@@ -646,8 +647,278 @@ def extract_xmm_lc(obsid: str, **kwargs):
                 misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_corr.log')
 
         os.chdir(cwd)
-        print(f'spectra {out}* created successfully')
+        print(f'Light cruves {prefix}* created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
         raise exception
+
+
+def extract_nustar_spec(obsid: str, **kwargs):
+    """Extract NuSTAR spectra for obsid with nuproducts
+    
+    Run from top level containting obsid folder
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    irun: int
+        Run number if in parallel. Can be used to name outputs as spec_{irun}_[a,b].*
+    processed_obsid: str
+        The name of the processed obsid folder. Default: {obsid}_p
+    
+    Any parameters to be passed to the reduction pipeline
+    
+    Return
+    ------
+    0 if succesful, and a heasoft error code otherwise
+    
+    """
+    irun = kwargs.pop('irun', None)
+    processed_obsid = kwargs.pop('processed_obsid', None)
+
+    prefix = 'spec'
+    if irun is not None:
+        prefix += f'_{irun}'
+    if processed_obsid is None:
+        processed_obsid = f'{obsid}_p'
+
+
+    outdir = f'{processed_obsid}/spec'
+    os.system(f'mkdir -p {outdir}')
+
+    # get ra and dec of the object
+    evtfile = f'{processed_obsid}/event_cl/nu{obsid}A01_cl.evt'
+    if not os.path.exists(evtfile):
+        raise ValueError(f'No event file {evtfile} found.')
+    with fits.open(evtfile) as filep:
+        obj_ra  = filep['events'].header['ra_obj'] # pylint: disable=no-member
+        obj_dec = filep['events'].header['dec_obj'] # pylint: disable=no-member
+
+
+    # defaults
+    in_pars = {
+        'indir'        : f'{processed_obsid}/event_cl',
+        'steminputs'   : f'nu{obsid}',
+        'outdir'       : f'{outdir}',
+        'srcregionfile': 'DEFAULT',
+        'bkgregionfile': 'DEFAULT',
+        'srcra'        : obj_ra,
+        'srcdec'       : obj_dec,
+        'srcradius'    : 150 / 2.46,
+        'bkgextract'   : 'yes',
+        'bkgra'        : obj_ra,
+        'bkgdec'       : obj_dec,
+        'bkgradius1'   : 180 / 2.46,
+        'bkgradius2'   : 320 / 2.46,
+        'lcfile'       : 'none',
+        'phafile'      : 'DEFAULT',
+        'bkgphafile'   : 'DEFAULT',
+        'xcolf'        : 'X',
+        'ycolf'        : 'Y',
+        'runbackscale' : 'yes',
+        'runmkarf'     : 'yes',
+        'runmkrmf'     : 'yes',
+        'rungrppha'    : 'yes',
+        'grpmincounts' : 20,
+        'clobber'      : 'yes',
+        'noprompt'   : True,
+    }
+    # update input with given parameter keywords
+    in_pars.update(**kwargs)
+
+
+    # get the spectra for the two instruments
+    for instr in ['A', 'B']:
+        sfiles = glob.glob(f'{outdir}/{prefix}_{instr.lower()}_sr.???')
+        if len(sfiles) == 3:
+            # nothing to do, spectra alreay exist
+            continue
+        lpars = {
+            'instrument': f'FPM{instr}',
+            'stemout'   : f'{prefix}_{instr.lower()}',
+            'imagefile' : f'{processed_obsid}/spec/image_{instr.lower()}.fits',
+        }
+        in_pars.update(**lpars)
+        with hsp.utils.local_pfiles_context():
+            out = hsp.nuproducts(**in_pars) # pylint: disable=no-member
+
+        if out.returncode == 0:
+            print(f'spectra sucessfully extracted for {obsid}-{instr.lower()}!')
+        else:
+            logfile = f'extract_nustar_spec_{obsid}-{instr.lower()}.log'
+            print(f'ERROR processing {obsid}; Writing log to {logfile}')
+            with open(logfile, 'w', encoding='utf8') as filep:
+                filep.write(str(out))
+            return out.returncode
+
+    return 0
+
+
+
+def extract_nustar_lc(obsid: str, **kwargs):
+    """Extract NuSTAR light curve for obsid with nuproducts
+    
+    Run from top level containting obsid folder
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    irun: int
+        Run number if in parallel. Can be used to name outputs as spec_{irun}_[a,b].*
+    processed_obsid: str
+        The name of the processed obsid folder. Default: {obsid}_p
+    ebins: str
+        Space-separated string of the energy bin boundaries in keV. Default is '3 79'
+    tbin: float
+        The time bin, negative means 2**tbin
+    lccorr: bool
+        Correct light curves. Default is True.
+    barycorr: bool
+        Barycenter the light curve (assume gti if used is bary-centered). Default is False.
+    outdir: str
+        output folder name under {processed_obsid}/. Default is lc.
+    
+    
+    Any parameters to be passed to the reduction nuproduct. e.g usrgtifile="somefile.gti"
+    
+    Return
+    ------
+    0 if succesful, and a heasoft error code otherwise
+    
+    """
+    irun = kwargs.pop('irun', None)
+    processed_obsid = kwargs.pop('processed_obsid', None)
+    ebins = kwargs.pop('ebins', '3 79')
+    tbin = kwargs.pop('tbin', 1.0)
+    lccorr = kwargs.pop('lccorr', True)
+    barycorr = kwargs.pop('barycorr', False)
+    outdir = kwargs.pop('outdir', 'lc')
+    irun = kwargs.pop('irin', None)
+
+    prefix = 'lc'
+    if irun is not None:
+        prefix += f'_{irun}'
+    if processed_obsid is None:
+        processed_obsid = f'{obsid}_p'
+
+
+    outdir = f'{processed_obsid}/{outdir}'
+    os.system(f'mkdir -p {outdir}')
+
+
+    if tbin < 0:
+        tbin = 2**tbin
+
+    ebins = np.array(ebins.split(), np.double)
+    nbins = len(ebins) - 1
+    # convert energies to channel number #
+    def conv(ene):
+        return int(np.floor((ene-1.6)/0.04))
+    chans = [ [conv(ebins[idx]), conv(ebins[idx+1])-1] for idx in range(nbins) ]
+    enegs = [ [ebins[idx],ebins[idx+1]] for idx in range(nbins) ]
+    np.savez(f'{outdir}/energy_{tbin:03g}.npz', en=enegs, chans=chans)
+
+
+    # get ra and dec of the object
+    evtfile = f'{processed_obsid}/event_cl/nu{obsid}A01_cl.evt'
+    if not os.path.exists(evtfile):
+        raise ValueError(f'No event file {evtfile} found.')
+    with fits.open(evtfile) as filep:
+        obj_ra  = filep['events'].header['ra_obj'] # pylint: disable=no-member
+        obj_dec = filep['events'].header['dec_obj'] # pylint: disable=no-member
+
+
+    # do we need barycorr?
+    if barycorr:
+        bary = {
+            'barycorr' : 'yes',
+            'srcra_barycorr'  : obj_ra,
+            'srcdec_barycorr' : obj_dec
+        }
+    else:
+        bary = {'barycorr': 'no'}
+
+    # defaults
+    in_pars = {
+        'indir'        : f'{processed_obsid}/event_cl',
+        'steminputs'   : f'nu{obsid}',
+        'outdir'       : outdir,
+        'srcregionfile': 'DEFAULT',
+        'bkgregionfile': 'DEFAULT',
+        'srcra'        : obj_ra,
+        'srcdec'       : obj_dec,
+        'srcradius'    : 150 / 2.46,
+        'bkgextract'   : 'yes',
+        'bkgra'        : obj_ra,
+        'bkgdec'       : obj_dec,
+        'bkgradius1'   : 180 / 2.46,
+        'bkgradius2'   : 320 / 2.46,
+        'imagefile'    : 'none',
+        'correctlc'    : lccorr,
+        'runbackscale' : 'yes',
+        'binsize'      : tbin,
+        'runmkarf'     : 'no',
+        'runmkrmf'     : 'no',
+
+        'clobber'      : 'yes',
+        'noprompt'   : True,
+    }
+    # update input with given parameter keywords
+    in_pars.update(**bary)
+    in_pars.update(**kwargs)
+
+
+    # loop through the enegies
+    for ien in range(nbins):
+
+        # get the spectra for the two instruments
+        for instr in ['A', 'B']:
+            stemout = f'{prefix}_{instr.lower()}_e{ien+1}'
+            lpars = {
+                'instrument': f'FPM{instr}',
+                'stemout'   : stemout,
+                'pilow'     : chans[ien][0],
+                'pihigh'    : chans[ien][1],
+                'lcenergy'  : np.max([(enegs[ien][0] + enegs[ien][1])/2., 3.1]),
+            }
+            if barycorr:
+                lpars['orbitfile'] = glob.glob(f'{processed_obsid}/event_cl/*{instr}*orb*')[0]
+            in_pars.update(**lpars)
+            try:
+                with hsp.utils.local_pfiles_context():
+                    out = hsp.nuproducts(**in_pars) # pylint: disable=no-member
+                    if out.returncode != 0:
+                        raise RuntimeError(str(out))
+
+                    # get backscale
+                    with fits.open(f'{outdir}/{stemout}_sr.pha') as filep:
+                        s_backscale = filep['SPECTRUM'].header['BACKSCAL'] # pylint: disable=no-member
+                    with fits.open(f'{outdir}/{stemout}_bk.pha') as filep:
+                        b_backscale = filep['SPECTRUM'].header['BACKSCAL'] # pylint: disable=no-member
+                    backscale = s_backscale/b_backscale
+                    # background subtraction
+                    out = hsp.lcmath(infile=f'{outdir}/{stemout}_sr.lc', # pylint: disable=no-member
+                                     bgfile=f'{outdir}/{stemout}_bk.lc',
+                                     outfile=f'{outdir}/{stemout}.lc',
+                                     multi=1.0, multb=backscale, addsubr='no')
+                    if out.returncode != 0:
+                        raise RuntimeError(str(out))
+
+                print(f'light curve sucessfully extracted for {obsid}-{instr}-e{ien+1}!')
+            except RuntimeError as exception:
+                logfile = f'extract_nustar_lc_{obsid}-{instr}-e{ien+1}.log'
+                print(f'ERROR processing {obsid}; Writing log to {logfile}')
+                with open(logfile, 'w', encoding='utf8') as filep:
+                    filep.write(str(exception))
+                return -1
+
+    return 0
