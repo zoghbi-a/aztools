@@ -759,7 +759,6 @@ def extract_nustar_spec(obsid: str, **kwargs):
     return 0
 
 
-
 def extract_nustar_lc(obsid: str, **kwargs):
     """Extract NuSTAR light curve for obsid with nuproducts
     
@@ -920,5 +919,95 @@ def extract_nustar_lc(obsid: str, **kwargs):
                 with open(logfile, 'w', encoding='utf8') as filep:
                     filep.write(str(exception))
                 return -1
+
+    return 0
+
+
+def extract_nicer_spec(obsid: str, **kwargs):
+    """Extract NICER spectra for obsid with nicerl3-spect
+    
+    Run from top level containting obsid folder
+    
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed
+    
+    Keywords
+    --------
+    irun: int
+        Run number if in parallel. Can be used to name outputs as spec[_{irun}].*
+    
+    Any parameters to be passed to the reduction pipeline
+    
+    Return
+    ------
+    0 if succesful, and a heasoft error code otherwise
+    
+    """
+    irun = kwargs.pop('irun', None)
+
+    prefix = 'spec'
+    if irun is not None:
+        prefix += f'_{irun}'
+    processed_obsid = obsid
+
+
+    outdir = f'{processed_obsid}/spec'
+    os.system(f'mkdir -p {outdir}')
+
+
+    # defaults
+    in_pars = {
+        'indir'        : obsid,
+        'phafile'      : f'{outdir}/{prefix}.pha',
+        'rmffile'      : f'{outdir}/{prefix}.rmf',
+        'arffile'      : f'{outdir}/{prefix}.arf',
+        'grouptype'    : 'NONE',
+        'loadfile'     : f'{outdir}/{prefix}.xcm',
+        'bkgformat'    : 'file',
+        'clobber'      : 'yes',
+        'noprompt'   : True,
+    }
+    bg_models = {
+        'scorpeon': 'sc',
+        '3c50'    : '3c',
+        'sw'      : 'sw'
+    }
+
+    # update input with given parameter keywords
+    in_pars.update(**kwargs)
+
+    if len(glob.glob(f'{outdir}/{prefix}*')) == 6:
+        print('Files already exist. Nothing to do!')
+        return 0
+
+    incr = 'no'
+    for bname, blabel in bg_models.items():
+
+        bgfile = f'{prefix}_{blabel}.bgd'
+        bpars = {
+            'bkgmodeltype': bname,
+            'bkgfile': f'{outdir}/{bgfile}',
+            'incremental': incr,
+        }
+        in_pars.update(**bpars)
+        out = hsp.nicerl3_spect(**in_pars) # pylint: disable=no-member
+        if out.returncode == 0:
+            print(f'{obsid}:{blabel} spectra extracted sucessfully!')
+            incr = 'yes'
+
+            with fits.open(f'{outdir}/{prefix}.pha') as filep:
+                filep['spectrum'].header['backfile'] = bgfile
+                filep['spectrum'].header['respfile'] = f'{prefix}.rmf'
+                filep['spectrum'].header['arffile']  = f'{prefix}.arf'
+                filep.writeto(f'{outdir}/{prefix}_{blabel}.pha', overwrite=True)
+
+        else:
+            logfile = f'extract_nicer_spec_{obsid}_{blabel}.log'
+            print(f'ERROR provessing {obsid}; Writing log to {logfile}')
+            with open(logfile, 'w', encoding='utf8') as filep:
+                filep.write(str(out))
+            return -1
 
     return 0

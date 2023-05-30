@@ -425,7 +425,9 @@ disable=raw-checker-failed,
         unnecessary-pass,
 	too-many-locals,
 	too-many-branches,
-	too-many-statements
+	too-many-statements,
+	no-member,
+	too-many-lines
 
 
 
