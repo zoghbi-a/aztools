@@ -1,5 +1,6 @@
 """Miscellaneous Utilities"""
 
+import glob
 import os
 import re
 import subprocess
@@ -608,3 +609,59 @@ def run_cmd_line_tool(cmd: str,
         'full_output': full_output
     }
     return result
+
+
+def add_spectra(speclist: list, outfile: str, **kwargs):
+    """Call addspec to combine spectra.
+    
+    do it multiple times if num of spectra above kwargs['nmax']
+    
+    Parameters
+    ----------
+    speclist: list
+        list of the names of the spectral files to be added
+    outfile: str
+        output name root
+    
+    Keywords:
+    ---------
+    nmax: int
+        add a maximum of nmax spectra at a time
+    
+    other parameters for addspec (qaddrmf, qsubback, clobber)
+    
+    """
+    nmax = kwargs.get('nmax', 10)
+    nspec = len(speclist)
+    nbatch = nspec//nmax
+
+    if nbatch > 1:
+        batches = [speclist[i:i+nbatch] for i in range(0, nspec, nbatch)]
+        # combine spectra in the batches
+        spec = [add_spectra(slist, f'{outfile}_{idx}', **kwargs)
+                for idx,slist in enumerate(batches)]
+
+        # combine the batches to produce one file
+        out = add_spectra(spec, outfile, **kwargs)
+        os.system(f'rm -rf {" ".join(spec)} '
+                  f'{" ".join([s.replace("pha", "rsp") for s in spec])}')
+        return out
+
+    with open('tmp.add', 'w', encoding='utf8') as filep:
+        filep.write('\n'.join(speclist))
+    if len(glob.glob(f'{outfile}.???')) != 0:
+        os.system(f'rm {outfile}.???')
+    qaddrmf = kwargs.get('qaddrmf', 'no')
+    qsubback = kwargs.get('qsubback', 'no')
+    clobber = kwargs.get('clobber', 'yes')
+    out = hsp.addspec( # pylint: disable=no-member
+        infil='tmp.add', outfil=outfile,
+        qaddrmf=qaddrmf, qsubback=qsubback, clobber=clobber)
+
+    if out.returncode != 0:
+        logfile = 'add_spectra.log'
+        with open(logfile, 'w', encoding='utf8') as filep:
+            filep.write(str(out))
+        raise RuntimeError(f'ERROR in addspec; Writing log to {logfile}')
+
+    return f'{outfile}.pha'
