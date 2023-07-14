@@ -5,9 +5,13 @@ import glob
 import os
 from multiprocessing import Pool
 
-import heasoftpy as hsp
 import numpy as np
 from astropy.io import fits
+
+try:
+    import heasoftpy as hsp
+except ImportError:
+    hsp = None
 
 from . import misc
 
@@ -75,6 +79,8 @@ def process_nicer_obsid(obsid: str, **kwargs):
     0 if succesful, and a heasoft error code otherwise
     
     """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
 
     # defaults
     in_pars = {
@@ -127,6 +133,8 @@ def process_nustar_obsid(obsid: str, **kwargs):
     0 if succesful, and a heasoft error code otherwise
     
     """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
 
     # defaults
     in_pars = {
@@ -182,6 +190,8 @@ def process_suzaku_obsid(obsid: str, **kwargs):
     0 if succesful, and a heasoft error code otherwise
     
     """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
 
     # defaults
     instr = 'xis'
@@ -701,6 +711,9 @@ def extract_nustar_spec(obsid: str, **kwargs):
     0 if succesful, and a heasoft error code otherwise
     
     """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+
     irun = kwargs.pop('irun', None)
     processed_obsid = kwargs.pop('processed_obsid', None)
 
@@ -820,6 +833,9 @@ def extract_nustar_lc(obsid: str, **kwargs):
     0 if succesful, and a heasoft error code otherwise
     
     """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+
     irun = kwargs.pop('irun', None)
     processed_obsid = kwargs.pop('processed_obsid', None)
     ebins = kwargs.pop('ebins', '3 79')
@@ -974,6 +990,9 @@ def extract_nicer_spec(obsid: str, **kwargs):
     0 if succesful, and a heasoft error code otherwise
     
     """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+
     irun = kwargs.pop('irun', None)
 
     prefix = 'spec'
