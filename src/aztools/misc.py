@@ -635,6 +635,9 @@ def add_spectra(speclist: list, outfile: str, **kwargs):
     other parameters for addspec (qaddrmf, qsubback, clobber)
     
     """
+    if hsp is None:
+        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+
     nmax = kwargs.get('nmax', 10)
     nspec = len(speclist)
     nbatch = nspec//nmax

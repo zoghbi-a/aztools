@@ -17,6 +17,10 @@ dynamic = ["version"]
 dependencies = [
     "deprecated",
     "ipykernel", # Support for Jupyter notebooks
+    "numpy>=1.24",
+    "scipy",
+    "astropy",
+    "matplotlib"
 ]
 
 # On a mac, install optional dependencies with `pip install '.[dev]'` (include the single quotes)
@@ -34,9 +38,7 @@ dev = [
     # dependencies to ./docs/requirements.txt as well.
     "nbconvert", # Needed for pre-commit check to clear output from Python notebooks
     "nbsphinx", # Used to integrate Python notebooks into Sphinx documentation
-    "ipython", # Also used in building notebooks into Sphinx
-    "matplotlib", # Used in sample notebook intro_notebook.ipynb
-    "numpy", # Used in sample notebook intro_notebook.ipynb
+    "ipython", # Also used in building notebooks into Sphinx 
 ]
 
 [build-system]
