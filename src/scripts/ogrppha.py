@@ -221,15 +221,18 @@ def do_ogrppha(args):
     # ------------------ #
 
 
-if __name__ == '__main__':
+def main():
+    """Group pha files using optimal binning based on the instrument resoluions.
+    
+    We use the formula in Kaastra+Bleeker 16,
+    with the addition of a signal to noise constraint.
+    The input spectrum is assumed to have the RESPFILE and BACKFILE keywords.
+    
+    
+    """
 
-    parser = argparse.ArgumentParser(description=(
-            'Group pha files using optimal binning based on the instrument '
-            'resoluions, or using the formula in Kaastra+Bleeker 16, '
-            'with the addition of a signal to noise constraint. '
-            'The input spectrum is assumed to have the RESPFILE and ' 
-            'BACKFILE keywords.'),            
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description=main.__doc__,
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("spec_file"  , metavar="spec_file", type=str,
                         help="The name of the input spectrum file.")
@@ -252,3 +255,7 @@ if __name__ == '__main__':
                               'This requires heasoft and ngroups < 100'))
 
     do_ogrppha(parser.parse_args())
+
+
+if __name__ == '__main__':
+    main()
