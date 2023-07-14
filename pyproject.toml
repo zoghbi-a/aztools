@@ -1,0 +1,52 @@
+[project]
+name = "aztools"
+license = {file = "LICENSE"}
+readme = "README.md"
+authors = [
+    { name = "Abdu Zoghbi", email = "astrozoghbi@gmail.com" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+]
+dynamic = ["version"]
+dependencies = [
+    "deprecated",
+    "ipykernel", # Support for Jupyter notebooks
+    "numpy>=1.24",
+    "scipy",
+    "astropy",
+    "matplotlib"
+]
+
+# On a mac, install optional dependencies with `pip install '.[dev]'` (include the single quotes)
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov", # Used to report total code coverage
+    "pre-commit", # Used to run checks before finalizing a git commit
+    "sphinx==5.3.0", # Used to automatically generate documentation
+    "sphinx_rtd_theme==1.2.0", # Used to render documentation
+    "sphinx-autoapi==2.0.1", # Used to automatically generate api documentation
+    "pylint", # Used for static linting of files
+    # if you add dependencies here while experimenting in a notebook and you
+    # want that notebook to render in your documentation, please add the
+    # dependencies to ./docs/requirements.txt as well.
+    "nbconvert", # Needed for pre-commit check to clear output from Python notebooks
+    "nbsphinx", # Used to integrate Python notebooks into Sphinx documentation
+    "ipython", # Also used in building notebooks into Sphinx 
+]
+
+[build-system]
+requires = [
+    "setuptools>=45", # Used to build and package the Python project
+    "setuptools_scm>=6.2", # Gets release version from git. Makes it available programmatically
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "src/aztools/_version.py"
