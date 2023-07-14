@@ -15,7 +15,11 @@ try:
 except ImportError:
     hsp = None
 
-
+__all__ = [
+    'split_array', 'group_array', 'write_pha_spec', 'write_2d_veusz',
+    'set_fancy_plot', 'sync_lcurve', 'lcurve_to_segments', 'read_fits_lcurve',
+    'run_cmd_line_tool', 'add_spectra'
+]
 
 def split_array(arr: np.ndarray,
                 length: int,

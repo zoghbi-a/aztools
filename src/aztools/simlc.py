@@ -7,6 +7,7 @@ import numpy as np
 import scipy.stats as st
 from numpy.random import RandomState
 
+__all__ = ['SimLC']
 
 class SimLC:
     """Class for simulating light curves"""

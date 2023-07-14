@@ -7,6 +7,7 @@ import numpy as np
 
 from .misc import group_array, read_fits_lcurve
 
+__all__ = ['LCurve']
 
 class LCurve:
     """Light curve class"""

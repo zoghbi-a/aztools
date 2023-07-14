@@ -11,7 +11,18 @@ from astropy.io import fits
 
 from . import misc
 
-__all__ = ['process_nicer_obsid', 'process_nicer_obsids']
+__all__ = [
+    'process_nicer_obsid', 'process_nicer_obsids',
+    'process_nustar_obsid', 'process_nustar_obsids',
+    'process_suzaku_obsid', 'process_suzaku_obsids',
+    'process_xmm_obsid', 'process_xmm_obsids',
+    'filter_xmm_obsid', 'filter_xmm_obsids',
+    'extract_xmm_spec', 'extract_xmm_specs',
+    'extract_xmm_lc', 'extract_xmm_lcs',
+    'extract_nustar_spec', 'extract_nustar_specs',
+    'extract_nustar_lc', 'extract_nustar_lcs',
+    'extract_nicer_spec', 'extract_nicer_specs'
+]
 
 
 def _make_parallel(func, nproc=4):
@@ -310,6 +321,9 @@ def process_xmm_obsid(obsid: str, **kwargs):
         os.chdir(cwd)
         raise exception
 
+# parallel version of process_xmm_obsid
+process_xmm_obsids = _make_parallel(process_xmm_obsid)
+
 
 def filter_xmm_obsid(obsid: str, **kwargs):
     """Filter XMM pn or mos obsid with xmm sas
@@ -414,6 +428,9 @@ def filter_xmm_obsid(obsid: str, **kwargs):
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
         raise exception
+
+# parallel version of filter_xmm_obsid
+filter_xmm_obsids = _make_parallel(filter_xmm_obsid)
 
 
 def extract_xmm_spec(obsid: str, **kwargs):
@@ -526,6 +543,9 @@ def extract_xmm_spec(obsid: str, **kwargs):
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
         raise exception
+
+# parallel version of extract_xmm_spec
+extract_xmm_specs = _make_parallel(extract_xmm_spec)
 
 
 def extract_xmm_lc(obsid: str, **kwargs):
@@ -653,6 +673,9 @@ def extract_xmm_lc(obsid: str, **kwargs):
         os.chdir(cwd)
         raise exception
 
+# parallel version of extract_xmm_lc
+extract_xmm_lcs = _make_parallel(extract_xmm_lc)
+
 
 def extract_nustar_spec(obsid: str, **kwargs):
     """Extract NuSTAR spectra for obsid with nuproducts
@@ -757,6 +780,9 @@ def extract_nustar_spec(obsid: str, **kwargs):
             return out.returncode
 
     return 0
+
+# parallel version of extract_nustar_spec
+extract_nustar_specs = _make_parallel(extract_nustar_spec)
 
 
 def extract_nustar_lc(obsid: str, **kwargs):
@@ -922,6 +948,9 @@ def extract_nustar_lc(obsid: str, **kwargs):
 
     return 0
 
+# parallel version of extract_nustar_lc
+extract_nustar_lcs = _make_parallel(extract_nustar_lc)
+
 
 def extract_nicer_spec(obsid: str, **kwargs):
     """Extract NICER spectra for obsid with nicerl3-spect
@@ -1011,3 +1040,6 @@ def extract_nicer_spec(obsid: str, **kwargs):
             return -1
 
     return 0
+
+# parallel version of extract_nustar_lc
+extract_nicer_specs = _make_parallel(extract_nicer_spec)
