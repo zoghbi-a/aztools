@@ -8,12 +8,9 @@ from multiprocessing import Pool
 import numpy as np
 from astropy.io import fits
 
-try:
-    import heasoftpy as hsp
-except ImportError:
-    hsp = None
-
 from . import misc
+
+hsp = misc.hsp
 
 __all__ = [
     'process_nicer_obsid', 'process_nicer_obsids',
