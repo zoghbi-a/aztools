@@ -50,3 +50,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 write_to = "src/aztools/_version.py"
+
+[project.scripts]
+ogrppha = "scripts.ogrppha:main"
