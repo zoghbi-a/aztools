@@ -294,7 +294,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
         # post run extra tasks
         if instr == 'pn':
-            evt = glob.glob('*EVL*')
+            evt = glob.glob('*PN*EVL*')
             if len(evt) != 1:
                 raise ValueError('Found >1 event files for pn')
             os.system(f'mv {evt[0]} {instr}.fits')
