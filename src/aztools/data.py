@@ -449,7 +449,8 @@ def extract_xmm_spec(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
     
     Keywords
     --------
@@ -463,8 +464,6 @@ def extract_xmm_spec(obsid: str, **kwargs):
         Note the &&.
     genrsp: bool
         Generate rmf and arf files.
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}.*
     
     """
     # get keywords
@@ -472,7 +471,6 @@ def extract_xmm_spec(obsid: str, **kwargs):
     regfile = kwargs.pop('regfile', 'ds9.reg')
     extra_expr = kwargs.pop('extra_expr', '')
     genrsp = kwargs.pop('genrsp', True)
-    irun = kwargs.pop('irun', None)
 
     # check keywords
     if instr not in ['pn', 'mos1', 'mos2']:
@@ -483,7 +481,8 @@ def extract_xmm_spec(obsid: str, **kwargs):
                           'to connect to other expression'))
 
     prefix = 'spec'
-    if irun is not None:
+    if ':' in obsid:
+        obsid, irun = obsid.split(':')
         prefix += f'_{irun}'
     cwd = os.getcwd()
 
@@ -564,7 +563,8 @@ def extract_xmm_lc(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is lc_{label}*
     
     Keywords
     --------
@@ -584,8 +584,6 @@ def extract_xmm_lc(obsid: str, **kwargs):
         Run epiclccorr. Default is True.
     outdir: str
         output folder name under {obsid}/{instr}/. Default is lc.
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}.*
     
     """
     # get keywords
@@ -596,7 +594,6 @@ def extract_xmm_lc(obsid: str, **kwargs):
     extra_expr = kwargs.pop('extra_expr', '')
     lccorr = kwargs.pop('lccorr', True)
     outdir = kwargs.pop('outdir', 'lc')
-    irun = kwargs.pop('irin', None)
 
     # check keywords
     if instr not in ['pn', 'mos1', 'mos2']:
@@ -613,7 +610,8 @@ def extract_xmm_lc(obsid: str, **kwargs):
                           'to connect to other expression'))
 
     prefix = f'lc_{tbin:03g}'
-    if irun is not None:
+    if ':' in obsid:
+        obsid, irun = obsid.split(':')
         prefix += f'_{irun}'
     cwd = os.getcwd()
 
@@ -692,12 +690,11 @@ def extract_nustar_spec(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
     
     Keywords
     --------
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}_[a,b].*
     processed_obsid: str
         The name of the processed obsid folder. Default: {obsid}_p
     
@@ -711,11 +708,11 @@ def extract_nustar_spec(obsid: str, **kwargs):
     if hsp is None:
         raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
 
-    irun = kwargs.pop('irun', None)
     processed_obsid = kwargs.pop('processed_obsid', None)
 
     prefix = 'spec'
-    if irun is not None:
+    if ':' in obsid:
+        obsid, irun = obsid.split(':')
         prefix += f'_{irun}'
     if processed_obsid is None:
         processed_obsid = f'{obsid}_p'
@@ -803,12 +800,11 @@ def extract_nustar_lc(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is lc_{label}*
     
     Keywords
     --------
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}_[a,b].*
     processed_obsid: str
         The name of the processed obsid folder. Default: {obsid}_p
     ebins: str
@@ -833,17 +829,16 @@ def extract_nustar_lc(obsid: str, **kwargs):
     if hsp is None:
         raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
 
-    irun = kwargs.pop('irun', None)
     processed_obsid = kwargs.pop('processed_obsid', None)
     ebins = kwargs.pop('ebins', '3 79')
     tbin = kwargs.pop('tbin', 1.0)
     lccorr = kwargs.pop('lccorr', True)
     barycorr = kwargs.pop('barycorr', False)
     outdir = kwargs.pop('outdir', 'lc')
-    irun = kwargs.pop('irin', None)
 
     prefix = 'lc'
-    if irun is not None:
+    if ':' in obsid:
+        obsid, irun = obsid.split(':')
         prefix += f'_{irun}'
     if processed_obsid is None:
         processed_obsid = f'{obsid}_p'
@@ -973,13 +968,11 @@ def extract_nicer_spec(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
     
     Keywords
     --------
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec[_{irun}].*
-    
     Any parameters to be passed to the reduction pipeline
     
     Return
@@ -990,10 +983,10 @@ def extract_nicer_spec(obsid: str, **kwargs):
     if hsp is None:
         raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
 
-    irun = kwargs.pop('irun', None)
 
     prefix = 'spec'
-    if irun is not None:
+    if ':' in obsid:
+        obsid, irun = obsid.split(':')
         prefix += f'_{irun}'
     processed_obsid = obsid
 
