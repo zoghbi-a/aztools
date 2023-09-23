@@ -49,6 +49,17 @@ def _make_parallel(func, nproc=4):
         if isinstance(obsids, str):
             obsids = [obsids]
 
+        irun = kwargs.pop('irun', None)
+        if irun is not None:
+            if isinstance(irun, int):
+                iruns = list(range(irun, irun+len(obsids)))
+            elif isinstance(irun, (list, np.ndarray)) and len(irun) == len(obsids):
+                iruns = irun
+            else:
+                raise ValueError(f'{irun} should be either an int or an array '
+                                 'of length similar to obsids')
+        obsids = [f'{o}:{ir}' for o,ir in zip(obsids, iruns)]
+
         with Pool(min(nproc, len(obsids))) as pool:
             results = pool.map(functools.partial(func, **kwargs), obsids)
 
