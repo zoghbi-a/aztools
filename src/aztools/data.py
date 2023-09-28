@@ -8,9 +8,7 @@ from multiprocessing import Pool
 import numpy as np
 from astropy.io import fits
 
-from . import misc
-
-hsp = misc.hsp
+from .misc import hsp, run_cmd_line_tool
 
 __all__ = [
     'process_nicer_obsid', 'process_nicer_obsids',
@@ -88,7 +86,7 @@ def process_nicer_obsid(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('process_nicer_obsid depends on heasoftpy. Install it first')
 
     # defaults
     in_pars = {
@@ -142,7 +140,7 @@ def process_nustar_obsid(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('process_nustar_obsid depends on heasoftpy. Install it first')
 
     # defaults
     in_pars = {
@@ -199,7 +197,7 @@ def process_suzaku_obsid(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('process_suzaku_obsid depends on heasoftpy. Install it first')
 
     # defaults
     instr = 'xis'
@@ -274,14 +272,14 @@ def process_xmm_obsid(obsid: str, **kwargs):
             if len(glob.glob('*gz')) > 0:
                 os.system('gzip -d *gz')
             cmd = 'cifbuild withccfpath=no analysisdate=now category=XMMCCF fullpath=yes'
-            misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_cifbuild.log')
+            run_cmd_line_tool(cmd, env, logfile='processing_xmm_cifbuild.log')
 
         env['SAS_CCF'] = f'{os.getcwd()}/ccf.cif'
 
         if len(glob.glob('*.SAS')) > 0:
             os.system('rm *.SAS')
         cmd = f'odfingest odfdir={os.getcwd()} outdir={os.getcwd()}'
-        misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_odfingest.log')
+        run_cmd_line_tool(cmd, env, logfile='processing_xmm_odfingest.log')
 
 
         # prepare the command
@@ -301,7 +299,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
         # the following with raise RuntimeError if the task fails
         cmd = f'{cmd} {" ".join([f"{par}={val}" for par,val in kwargs.items()])}'
-        misc.run_cmd_line_tool(cmd, env, logfile=f'processing_xmm_{instr}.log')
+        run_cmd_line_tool(cmd, env, logfile=f'processing_xmm_{instr}.log')
 
         # post run extra tasks
         if instr == 'pn':
@@ -330,7 +328,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
             cmd = ('rgscombine pha="spec_r1.src spec_r2.src" bkg="spec_r1.bgd spec_r2.bgd" '
                    'rmf="spec_r1.rsp spec_r2.rsp" filepha="spec_rgs.src" filebkg="spec_rgs.bgd" '
                    'filermf="spec_rgs.rsp"')
-            misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_rgscombine.log')
+            run_cmd_line_tool(cmd, env, logfile='processing_xmm_rgscombine.log')
             print('rgs spectra created successfully')
 
         os.chdir(cwd)
@@ -347,7 +345,7 @@ def filter_xmm_obsid(obsid: str, **kwargs):
     """Filter XMM pn or mos obsid with xmm sas
     
     Run from top level containting obsid folder.
-    This assumes @misc.process_xmm_obsid was called first.
+    This assumes process_xmm_obsid was called first.
     By default, do standard filtering; R<0.4 in pn or R<0.35 for mos
     
     Parameters
@@ -406,33 +404,33 @@ def filter_xmm_obsid(obsid: str, **kwargs):
             f"#XMMEA_{foptions[instr[:3]][1]}' "
             "makeratecolumn=yes maketimecolumn=yes timebinsize=100"
         )
-        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_evselect.log')
+        run_cmd_line_tool(cmd, logfile='filter_xmm_evselect.log')
 
         # generate GTI
         expr = gtiexpr or f'RATE < {foptions[instr[:3]][3]}'
         cmd = ('tabgtigen table=tmp.rate gtiset=tmp.gti '
                f'expression="RATE<{foptions[instr[:3]][3]}"')
-        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_tabgtigen.log')
+        run_cmd_line_tool(cmd, logfile='filter_xmm_tabgtigen.log')
 
         # apply GTI
         expr = ('gti(tmp.gti,TIME)&&(PI IN [200:12000])&&(FLAG==0)&&'
                 f'(PATTERN<={foptions[instr[:3]][2]}){extra_expr}')
         cmd = (f"evselect table={evt}:EVENTS withfilteredset=yes "
                f"filteredset={filtered_evt} expression='{expr}'")
-        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_evselect2.log')
+        run_cmd_line_tool(cmd, logfile='filter_xmm_evselect2.log')
 
         # barycenter corrections? #
         if barycorr:
             os.system(f'cp {filtered_evt} {instr}_filtered_nobary.fits'.format(instr))
             cmd = f'barycen table={filtered_evt}:EVENTS'
-            misc.run_cmd_line_tool(cmd, logfile='filter_xmm_barycen.log')
+            run_cmd_line_tool(cmd, logfile='filter_xmm_barycen.log')
 
         # region?
         if region:
             # create an image
             cmd = (f"evselect table={filtered_evt}:EVENTS withimageset=yes "
                    "imageset=tmp.img xcolumn=X ycolumn=Y")
-            misc.run_cmd_line_tool(cmd, logfile='filter_xmm_image.log')
+            run_cmd_line_tool(cmd, logfile='filter_xmm_image.log')
 
             # call ds9
             print('launching ds9')
@@ -455,7 +453,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
     """Extract XMM pn or mos spectrum with xmm sas
     
     Run from top level containting obsid folder
-    This assumes @misc.filter_xmm_obsid was called first.
+    This assumes filter_xmm_obsid was called first.
     
     Parameters
     ----------
@@ -533,26 +531,26 @@ def extract_xmm_spec(obsid: str, **kwargs):
                    'energycolumn=PI spectralbinsize=5 withspecranges=yes '
                    f'specchannelmin=0 specchannelmax={maxchan}'
             )
-            misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}.log')
+            run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}.log')
             # backscale
             cmd = f'backscale spectrumset={prefix}.{lab} badpixlocation={filtered_evt}'
-            misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}_backscale.log')
+            run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}_backscale.log')
 
         if genrsp:
             # response
             cmd = f'rmfgen spectrumset={prefix}.pha rmfset={prefix}.rmf'
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_rmf.log')
+            run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_rmf.log')
 
             # arf
             cmd = (f'arfgen spectrumset={prefix}.pha arfset={prefix}.arf withrmfset=yes '
                    f'rmfset={prefix}.rmf badpixlocation={filtered_evt} detmaptype=psf')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_arf.log')
+            run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_arf.log')
 
             # group spectra
             cmd = (f'specgroup spectrumset={prefix}.pha rmfset={prefix}.rmf '
                    f'backgndset={prefix}.bgd arfset={prefix}.arf groupedset={prefix}.grp '
                    'minSN=6 oversample=3')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_grp.log')
+            run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_grp.log')
 
         os.chdir(cwd)
         print(f'spectra {prefix}* created successfully')
@@ -569,7 +567,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
     """Extract XMM pn or mos light curves with xmm sas
     
     Run from top level containting obsid folder
-    This assumes @misc.filter_xmm_obsid was called first.
+    This assumes @filter_xmm_obsid was called first.
     
     Parameters
     ----------
@@ -665,7 +663,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
             cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
                    f'rateset={src} expression="{expr}" makeratecolumn=yes '
                    f'maketimecolumn=yes timebinsize={tbin}')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_src.log')
+            run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_src.log')
 
 
             # extract bgd lc
@@ -673,14 +671,14 @@ def extract_xmm_lc(obsid: str, **kwargs):
             cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
                    f'rateset={bgd} expression="{expr}" makeratecolumn=yes '
                    f'maketimecolumn=yes timebinsize={tbin}')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_bgd.log')
+            run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_bgd.log')
 
 
             # correct lc
             if lccorr:
                 cmd = (f'epiclccorr srctslist={src} eventlist={filtered_evt} outset={smb} '
                        f'withbkgset=yes bkgtslist={bgd} applyabsolutecorrections=no')
-                misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_corr.log')
+                run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_corr.log')
 
         os.chdir(cwd)
         print(f'Light cruves {prefix}* created successfully')
@@ -717,7 +715,7 @@ def extract_nustar_spec(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('extract_nustar_spec depends on heasoftpy. Install it first')
 
     processed_obsid = kwargs.pop('processed_obsid', None)
 
@@ -838,7 +836,7 @@ def extract_nustar_lc(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('extract_nustar_lc depends on heasoftpy. Install it first')
 
     processed_obsid = kwargs.pop('processed_obsid', None)
     ebins = kwargs.pop('ebins', '3 79')
@@ -992,7 +990,7 @@ def extract_nicer_spec(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('extract_nicer_spec depends on heasoftpy. Install it first')
 
 
     prefix = 'spec'
