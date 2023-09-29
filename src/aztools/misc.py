@@ -3,7 +3,6 @@
 import functools
 import glob
 import os
-import re
 import subprocess
 from itertools import groupby
 from multiprocessing import Pool
@@ -581,12 +580,9 @@ def run_cmd_line_tool(cmd: str,
 
     output = ''
     try:
-        # pylint: disable=consider-using-f-string
-        cmd_list = [cmd.split()[0]] + ['{}={}'.format(par,val.replace('"','').replace("'",''))
-                    for par,val in re.findall(r'(\w+)=(["\'].*?["\']|\S+)', cmd)]
 
-        with subprocess.Popen(cmd_list, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, env=run_env) as proc:
+        with subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True,
+                              stderr=subprocess.PIPE, env=run_env) as proc:
             output, error = proc.communicate()
 
 
@@ -732,7 +728,6 @@ def parallelize(func, use_irun=True):
                 raise ValueError(f'{irun} should be either an int or a list '
                                  'of length similar to number of calls')
             kwargs['irun'] = irun
-        print(kwargs)
 
         with Pool(nproc) as pool:
             results = [
