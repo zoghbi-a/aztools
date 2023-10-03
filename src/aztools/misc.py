@@ -730,14 +730,15 @@ def parallelize(func, use_irun=True):
             kwargs['irun'] = irun
 
         with Pool(nproc) as pool:
-            results = [
+            procs = [
                 pool.apply_async(
                     func,
                     args=[arg[it] for arg in args],
                     kwds={key:val[it] for key,val in kwargs.items()}
-                ).get()
+                )
                 for it in range(ntasks)
             ]
+            results = [proc.get() for proc in procs]
 
         return results
     # Update the docstring
