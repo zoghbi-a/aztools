@@ -15,7 +15,6 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "deprecated",
     "ipykernel", # Support for Jupyter notebooks
     "numpy>=1.24",
     "scipy",
@@ -29,9 +28,9 @@ dev = [
     "pytest",
     "pytest-cov", # Used to report total code coverage
     "pre-commit", # Used to run checks before finalizing a git commit
-    "sphinx==5.3.0", # Used to automatically generate documentation
-    "sphinx_rtd_theme==1.2.0", # Used to render documentation
-    "sphinx-autoapi==2.0.1", # Used to automatically generate api documentation
+    "sphinx", # Used to automatically generate documentation
+    "sphinx-rtd-theme", # Used to render documentation
+    "sphinx-autoapi", # Used to automatically generate api documentation
     "pylint", # Used for static linting of files
     # if you add dependencies here while experimenting in a notebook and you
     # want that notebook to render in your documentation, please add the
@@ -43,7 +42,7 @@ dev = [
 
 [build-system]
 requires = [
-    "setuptools>=45", # Used to build and package the Python project
+    "setuptools>=62", # Used to build and package the Python project
     "setuptools_scm>=6.2", # Gets release version from git. Makes it available programmatically
 ]
 build-backend = "setuptools.build_meta"
@@ -53,3 +52,11 @@ write_to = "src/aztools/_version.py"
 
 [project.scripts]
 ogrppha = "aztools.scripts.ogrppha:main"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+
+[tool.coverage.run]
+omit=["src/aztools/_version.py"]
