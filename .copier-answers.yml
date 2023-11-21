@@ -1,15 +1,18 @@
 # Changes here will be overwritten by Copier
-_commit: v1.3.3
+_commit: v1.4.5
 _src_path: gh:lincc-frameworks/python-project-template
 author_email: astrozoghbi@gmail.com
 author_name: Abdu Zoghbi
-create_example_module: true
-custom_install: false
+create_example_module: false
+custom_install: true
+include_benchmarks: false
+include_docs: true
 include_notebooks: true
-module_name: aztools
 mypy_type_checking: none
+package_name: aztools
 preferred_linter: pylint
 project_license: MIT
 project_name: aztools
+project_organization: zoghbi-a
 use_gitlfs: none
 use_isort: true

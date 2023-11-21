@@ -1,16 +1,12 @@
 """Data Tools"""
 
-import functools
 import glob
 import os
-from multiprocessing import Pool
 
 import numpy as np
 from astropy.io import fits
 
-from . import misc
-
-hsp = misc.hsp
+from .misc import hsp, parallelize, run_cmd_line_tool
 
 __all__ = [
     'process_nicer_obsid', 'process_nicer_obsids',
@@ -24,37 +20,6 @@ __all__ = [
     'extract_nustar_lc', 'extract_nustar_lcs',
     'extract_nicer_spec', 'extract_nicer_specs'
 ]
-
-
-def _make_parallel(func, nproc=4):
-    """A wrapper to make a function run in parallel
-    
-    Parameters
-    ----------
-    func: method
-        The method to parallelize. It should expects on obsid
-    nproc: int
-        Number of processes to run
-
-    Return
-    ------
-    return a method that takes a list of obsids and calls func
-    on each of them in parallel
-    
-    """
-
-    @functools.wraps(func)
-    def parallelize(obsids, **kwargs):
-
-        if isinstance(obsids, str):
-            obsids = [obsids]
-
-        with Pool(min(nproc, len(obsids))) as pool:
-            results = pool.map(functools.partial(func, **kwargs), obsids)
-
-        return results
-
-    return parallelize
 
 
 def process_nicer_obsid(obsid: str, **kwargs):
@@ -77,7 +42,7 @@ def process_nicer_obsid(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('process_nicer_obsid depends on heasoftpy. Install it first')
 
     # defaults
     in_pars = {
@@ -108,7 +73,7 @@ def process_nicer_obsid(obsid: str, **kwargs):
 
 
 # parallel version of process_nicer_obsid
-process_nicer_obsids = _make_parallel(process_nicer_obsid)
+process_nicer_obsids = parallelize(process_nicer_obsid, use_irun=False)
 
 
 def process_nustar_obsid(obsid: str, **kwargs):
@@ -131,7 +96,7 @@ def process_nustar_obsid(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('process_nustar_obsid depends on heasoftpy. Install it first')
 
     # defaults
     in_pars = {
@@ -165,7 +130,7 @@ def process_nustar_obsid(obsid: str, **kwargs):
     return out.returncode
 
 # parallel version of process_nicer_obsid
-process_nustar_obsids = _make_parallel(process_nustar_obsid)
+process_nustar_obsids = parallelize(process_nustar_obsid, use_irun=False)
 
 
 def process_suzaku_obsid(obsid: str, **kwargs):
@@ -188,7 +153,7 @@ def process_suzaku_obsid(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('process_suzaku_obsid depends on heasoftpy. Install it first')
 
     # defaults
     instr = 'xis'
@@ -223,7 +188,17 @@ def process_suzaku_obsid(obsid: str, **kwargs):
     return out.returncode
 
 # parallel version of process_suzaku_obsid
-process_suzaku_obsids = _make_parallel(process_suzaku_obsid)
+process_suzaku_obsids = parallelize(process_suzaku_obsid, use_irun=False)
+
+
+def _run_sas_cmd(cmd, *args, **kwargs):
+    """prefix run_cmd_line_tool with sas initialization"""
+
+    if 'SAS_DIR' not in os.environ:
+        raise KeyError('SAS_DIR is not defined')
+
+    pre_cmd = 'source $SAS_DIR/sas-setup.sh; '
+    return run_cmd_line_tool(pre_cmd + cmd, *args, **kwargs)
 
 
 def process_xmm_obsid(obsid: str, **kwargs):
@@ -240,10 +215,14 @@ def process_xmm_obsid(obsid: str, **kwargs):
     --------
     instr: str
         Instrument or instrument mode: pn|mos|rgs|om
+    odfingest: bool
+        run odfingest? This should be True for the first run
+        and False subsequently
     Any parameters to be passed to the reduction pipeline
     
     
     """
+    odfingest = kwargs.pop('odfingest', True)
 
     # defaults
     instr = kwargs.pop('instr', 'pn')
@@ -263,14 +242,15 @@ def process_xmm_obsid(obsid: str, **kwargs):
             if len(glob.glob('*gz')) > 0:
                 os.system('gzip -d *gz')
             cmd = 'cifbuild withccfpath=no analysisdate=now category=XMMCCF fullpath=yes'
-            misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_cifbuild.log')
+            _run_sas_cmd(cmd, env, logfile='processing_xmm_cifbuild.log')
 
         env['SAS_CCF'] = f'{os.getcwd()}/ccf.cif'
 
-        if len(glob.glob('*.SAS')) > 0:
+        if len(glob.glob('*.SAS')) > 0 and odfingest:
             os.system('rm *.SAS')
-        cmd = f'odfingest odfdir={os.getcwd()} outdir={os.getcwd()}'
-        misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_odfingest.log')
+        if odfingest:
+            cmd = f'odfingest odfdir={os.getcwd()} outdir={os.getcwd()}'
+            _run_sas_cmd(cmd, env, logfile='processing_xmm_odfingest.log')
 
 
         # prepare the command
@@ -288,13 +268,13 @@ def process_xmm_obsid(obsid: str, **kwargs):
         else:
             raise ValueError('instr needs to be pn|om|rgs|om')
 
-        # the following with raise RuntimeError if the task fails
+        # the following will raise RuntimeError if the task fails
         cmd = f'{cmd} {" ".join([f"{par}={val}" for par,val in kwargs.items()])}'
-        misc.run_cmd_line_tool(cmd, env, logfile=f'processing_xmm_{instr}.log')
+        _run_sas_cmd(cmd, env, logfile=f'processing_xmm_{instr}.log')
 
         # post run extra tasks
         if instr == 'pn':
-            evt = glob.glob('*EVL*')
+            evt = glob.glob('*PN*EVL*')
             if len(evt) != 1:
                 raise ValueError('Found >1 event files for pn')
             os.system(f'mv {evt[0]} {instr}.fits')
@@ -319,7 +299,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
             cmd = ('rgscombine pha="spec_r1.src spec_r2.src" bkg="spec_r1.bgd spec_r2.bgd" '
                    'rmf="spec_r1.rsp spec_r2.rsp" filepha="spec_rgs.src" filebkg="spec_rgs.bgd" '
                    'filermf="spec_rgs.rsp"')
-            misc.run_cmd_line_tool(cmd, env, logfile='processing_xmm_rgscombine.log')
+            _run_sas_cmd(cmd, env, logfile='processing_xmm_rgscombine.log')
             print('rgs spectra created successfully')
 
         os.chdir(cwd)
@@ -329,14 +309,14 @@ def process_xmm_obsid(obsid: str, **kwargs):
         raise exception
 
 # parallel version of process_xmm_obsid
-process_xmm_obsids = _make_parallel(process_xmm_obsid)
+process_xmm_obsids = parallelize(process_xmm_obsid, use_irun=False)
 
 
 def filter_xmm_obsid(obsid: str, **kwargs):
     """Filter XMM pn or mos obsid with xmm sas
     
     Run from top level containting obsid folder.
-    This assumes @misc.process_xmm_obsid was called first.
+    This assumes process_xmm_obsid was called first.
     By default, do standard filtering; R<0.4 in pn or R<0.35 for mos
     
     Parameters
@@ -395,33 +375,33 @@ def filter_xmm_obsid(obsid: str, **kwargs):
             f"#XMMEA_{foptions[instr[:3]][1]}' "
             "makeratecolumn=yes maketimecolumn=yes timebinsize=100"
         )
-        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_evselect.log')
+        _run_sas_cmd(cmd, logfile='filter_xmm_evselect.log')
 
         # generate GTI
         expr = gtiexpr or f'RATE < {foptions[instr[:3]][3]}'
         cmd = ('tabgtigen table=tmp.rate gtiset=tmp.gti '
                f'expression="RATE<{foptions[instr[:3]][3]}"')
-        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_tabgtigen.log')
+        _run_sas_cmd(cmd, logfile='filter_xmm_tabgtigen.log')
 
         # apply GTI
         expr = ('gti(tmp.gti,TIME)&&(PI IN [200:12000])&&(FLAG==0)&&'
                 f'(PATTERN<={foptions[instr[:3]][2]}){extra_expr}')
         cmd = (f"evselect table={evt}:EVENTS withfilteredset=yes "
                f"filteredset={filtered_evt} expression='{expr}'")
-        misc.run_cmd_line_tool(cmd, logfile='filter_xmm_evselect2.log')
+        _run_sas_cmd(cmd, logfile='filter_xmm_evselect2.log')
 
         # barycenter corrections? #
         if barycorr:
             os.system(f'cp {filtered_evt} {instr}_filtered_nobary.fits'.format(instr))
             cmd = f'barycen table={filtered_evt}:EVENTS'
-            misc.run_cmd_line_tool(cmd, logfile='filter_xmm_barycen.log')
+            _run_sas_cmd(cmd, logfile='filter_xmm_barycen.log')
 
         # region?
         if region:
             # create an image
             cmd = (f"evselect table={filtered_evt}:EVENTS withimageset=yes "
                    "imageset=tmp.img xcolumn=X ycolumn=Y")
-            misc.run_cmd_line_tool(cmd, logfile='filter_xmm_image.log')
+            _run_sas_cmd(cmd, logfile='filter_xmm_image.log')
 
             # call ds9
             print('launching ds9')
@@ -437,19 +417,20 @@ def filter_xmm_obsid(obsid: str, **kwargs):
         raise exception
 
 # parallel version of filter_xmm_obsid
-filter_xmm_obsids = _make_parallel(filter_xmm_obsid)
+filter_xmm_obsids = parallelize(filter_xmm_obsid, use_irun=False)
 
 
 def extract_xmm_spec(obsid: str, **kwargs):
     """Extract XMM pn or mos spectrum with xmm sas
     
     Run from top level containting obsid folder
-    This assumes @misc.filter_xmm_obsid was called first.
+    This assumes filter_xmm_obsid was called first.
     
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
     
     Keywords
     --------
@@ -464,7 +445,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
     genrsp: bool
         Generate rmf and arf files.
     irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}.*
+        name suffix, so the output is spec_{irun}*
     
     """
     # get keywords
@@ -472,7 +453,6 @@ def extract_xmm_spec(obsid: str, **kwargs):
     regfile = kwargs.pop('regfile', 'ds9.reg')
     extra_expr = kwargs.pop('extra_expr', '')
     genrsp = kwargs.pop('genrsp', True)
-    irun = kwargs.pop('irun', None)
 
     # check keywords
     if instr not in ['pn', 'mos1', 'mos2']:
@@ -483,6 +463,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
                           'to connect to other expression'))
 
     prefix = 'spec'
+    irun = kwargs.get('irun', None)
     if irun is not None:
         prefix += f'_{irun}'
     cwd = os.getcwd()
@@ -523,26 +504,26 @@ def extract_xmm_spec(obsid: str, **kwargs):
                    'energycolumn=PI spectralbinsize=5 withspecranges=yes '
                    f'specchannelmin=0 specchannelmax={maxchan}'
             )
-            misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_spec_{lab}.log')
             # backscale
             cmd = f'backscale spectrumset={prefix}.{lab} badpixlocation={filtered_evt}'
-            misc.run_cmd_line_tool(cmd, env, logfile=f'extract_xmm_spec_{lab}_backscale.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_spec_{lab}_backscale.log')
 
         if genrsp:
             # response
             cmd = f'rmfgen spectrumset={prefix}.pha rmfset={prefix}.rmf'
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_rmf.log')
+            _run_sas_cmd(cmd, env, logfile='extract_xmm_spec_rmf.log')
 
             # arf
             cmd = (f'arfgen spectrumset={prefix}.pha arfset={prefix}.arf withrmfset=yes '
                    f'rmfset={prefix}.rmf badpixlocation={filtered_evt} detmaptype=psf')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_arf.log')
+            _run_sas_cmd(cmd, env, logfile='extract_xmm_spec_arf.log')
 
             # group spectra
             cmd = (f'specgroup spectrumset={prefix}.pha rmfset={prefix}.rmf '
                    f'backgndset={prefix}.bgd arfset={prefix}.arf groupedset={prefix}.grp '
                    'minSN=6 oversample=3')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_spec_grp.log')
+            _run_sas_cmd(cmd, env, logfile='extract_xmm_spec_grp.log')
 
         os.chdir(cwd)
         print(f'spectra {prefix}* created successfully')
@@ -552,19 +533,20 @@ def extract_xmm_spec(obsid: str, **kwargs):
         raise exception
 
 # parallel version of extract_xmm_spec
-extract_xmm_specs = _make_parallel(extract_xmm_spec)
+extract_xmm_specs = parallelize(extract_xmm_spec, use_irun=True)
 
 
 def extract_xmm_lc(obsid: str, **kwargs):
     """Extract XMM pn or mos light curves with xmm sas
     
     Run from top level containting obsid folder
-    This assumes @misc.filter_xmm_obsid was called first.
+    This assumes @filter_xmm_obsid was called first.
     
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is lc_{label}*
     
     Keywords
     --------
@@ -585,7 +567,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
     outdir: str
         output folder name under {obsid}/{instr}/. Default is lc.
     irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}.*
+        name suffix so the output file is lc_{irun}*
     
     """
     # get keywords
@@ -596,7 +578,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
     extra_expr = kwargs.pop('extra_expr', '')
     lccorr = kwargs.pop('lccorr', True)
     outdir = kwargs.pop('outdir', 'lc')
-    irun = kwargs.pop('irin', None)
+    irun = kwargs.get('irun', None)
 
     # check keywords
     if instr not in ['pn', 'mos1', 'mos2']:
@@ -656,7 +638,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
             cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
                    f'rateset={src} expression="{expr}" makeratecolumn=yes '
                    f'maketimecolumn=yes timebinsize={tbin}')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_src.log')
+            _run_sas_cmd(cmd, env, logfile='extract_xmm_lc_src.log')
 
 
             # extract bgd lc
@@ -664,14 +646,14 @@ def extract_xmm_lc(obsid: str, **kwargs):
             cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
                    f'rateset={bgd} expression="{expr}" makeratecolumn=yes '
                    f'maketimecolumn=yes timebinsize={tbin}')
-            misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_bgd.log')
+            _run_sas_cmd(cmd, env, logfile='extract_xmm_lc_bgd.log')
 
 
             # correct lc
             if lccorr:
                 cmd = (f'epiclccorr srctslist={src} eventlist={filtered_evt} outset={smb} '
                        f'withbkgset=yes bkgtslist={bgd} applyabsolutecorrections=no')
-                misc.run_cmd_line_tool(cmd, env, logfile='extract_xmm_lc_corr.log')
+                _run_sas_cmd(cmd, env, logfile='extract_xmm_lc_corr.log')
 
         os.chdir(cwd)
         print(f'Light cruves {prefix}* created successfully')
@@ -681,7 +663,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
         raise exception
 
 # parallel version of extract_xmm_lc
-extract_xmm_lcs = _make_parallel(extract_xmm_lc)
+extract_xmm_lcs = parallelize(extract_xmm_lc, use_irun=True)
 
 
 def extract_nustar_spec(obsid: str, **kwargs):
@@ -692,14 +674,15 @@ def extract_nustar_spec(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
     
     Keywords
     --------
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}_[a,b].*
     processed_obsid: str
         The name of the processed obsid folder. Default: {obsid}_p
+    irun: int
+        name suffix so the output is spec_{irun}*
     
     Any parameters to be passed to the reduction pipeline
     
@@ -709,10 +692,10 @@ def extract_nustar_spec(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('extract_nustar_spec depends on heasoftpy. Install it first')
 
-    irun = kwargs.pop('irun', None)
     processed_obsid = kwargs.pop('processed_obsid', None)
+    irun = kwargs.pop('irun', None)
 
     prefix = 'spec'
     if irun is not None:
@@ -792,7 +775,7 @@ def extract_nustar_spec(obsid: str, **kwargs):
     return 0
 
 # parallel version of extract_nustar_spec
-extract_nustar_specs = _make_parallel(extract_nustar_spec)
+extract_nustar_specs = parallelize(extract_nustar_spec, use_irun=True)
 
 
 def extract_nustar_lc(obsid: str, **kwargs):
@@ -803,12 +786,11 @@ def extract_nustar_lc(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is lc_{label}*
     
     Keywords
     --------
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec_{irun}_[a,b].*
     processed_obsid: str
         The name of the processed obsid folder. Default: {obsid}_p
     ebins: str
@@ -821,6 +803,8 @@ def extract_nustar_lc(obsid: str, **kwargs):
         Barycenter the light curve (assume gti if used is bary-centered). Default is False.
     outdir: str
         output folder name under {processed_obsid}/. Default is lc.
+    irun: int or str
+        name suffix so that the output is lc_{irun}*
     
     
     Any parameters to be passed to the reduction nuproduct. e.g usrgtifile="somefile.gti"
@@ -831,16 +815,16 @@ def extract_nustar_lc(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('extract_nustar_lc depends on heasoftpy. Install it first')
 
-    irun = kwargs.pop('irun', None)
     processed_obsid = kwargs.pop('processed_obsid', None)
     ebins = kwargs.pop('ebins', '3 79')
     tbin = kwargs.pop('tbin', 1.0)
     lccorr = kwargs.pop('lccorr', True)
     barycorr = kwargs.pop('barycorr', False)
     outdir = kwargs.pop('outdir', 'lc')
-    irun = kwargs.pop('irin', None)
+    irun = kwargs.get('irun', None)
+
 
     prefix = 'lc'
     if irun is not None:
@@ -962,7 +946,7 @@ def extract_nustar_lc(obsid: str, **kwargs):
     return 0
 
 # parallel version of extract_nustar_lc
-extract_nustar_lcs = _make_parallel(extract_nustar_lc)
+extract_nustar_lcs = parallelize(extract_nustar_lc, use_irun=True)
 
 
 def extract_nicer_spec(obsid: str, **kwargs):
@@ -973,13 +957,13 @@ def extract_nicer_spec(obsid: str, **kwargs):
     Parameters
     ----------
     obsid: str
-        Obsid to be processed
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
     
     Keywords
     --------
-    irun: int
-        Run number if in parallel. Can be used to name outputs as spec[_{irun}].*
-    
+    irun: int or str
+        name suffix so the output is spec_{irun}*
     Any parameters to be passed to the reduction pipeline
     
     Return
@@ -988,10 +972,9 @@ def extract_nicer_spec(obsid: str, **kwargs):
     
     """
     if hsp is None:
-        raise ImportError('write_pha_spec depends on heasoftpy. Install it first')
+        raise ImportError('extract_nicer_spec depends on heasoftpy. Install it first')
 
-    irun = kwargs.pop('irun', None)
-
+    irun = kwargs.get('irun', None)
     prefix = 'spec'
     if irun is not None:
         prefix += f'_{irun}'
@@ -1058,4 +1041,4 @@ def extract_nicer_spec(obsid: str, **kwargs):
     return 0
 
 # parallel version of extract_nustar_lc
-extract_nicer_specs = _make_parallel(extract_nicer_spec)
+extract_nicer_specs = parallelize(extract_nicer_spec, use_irun=True)

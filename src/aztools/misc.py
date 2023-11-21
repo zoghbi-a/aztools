@@ -1,11 +1,18 @@
 """Miscellaneous Utilities"""
 
+import functools
 import glob
 import os
-import re
 import subprocess
 from itertools import groupby
+from multiprocessing import Pool
 from typing import Union
+
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
+
 
 import numpy as np
 from astropy.io import fits
@@ -18,7 +25,7 @@ except ImportError:
 __all__ = [
     'split_array', 'group_array', 'write_pha_spec', 'write_2d_veusz',
     'set_fancy_plot', 'sync_lcurve', 'lcurve_to_segments', 'read_fits_lcurve',
-    'run_cmd_line_tool', 'add_spectra'
+    'run_cmd_line_tool', 'add_spectra', 'parallelize'
 ]
 
 def split_array(arr: np.ndarray,
@@ -296,14 +303,12 @@ def write_2d_veusz(fname: str,
         filep.write(f'{thead}{txt2d}')
 
 
-def set_fancy_plot(plt):
+def set_fancy_plot():
     """Some settings for plt that make nicer plots
     
-    Parameters
-    ----------
-    plt: matplotlib.pyplot
-    
     """
+    if plt is None:
+        raise ImportError('matplotlib is not available. Cannot use set_fancy_plot')
 
     plt.rcParams.update({
         'font.size': 14, 
@@ -575,12 +580,9 @@ def run_cmd_line_tool(cmd: str,
 
     output = ''
     try:
-        # pylint: disable=consider-using-f-string
-        cmd_list = [cmd.split()[0]] + ['{}={}'.format(par,val.replace('"','').replace("'",''))
-                    for par,val in re.findall(r'(\w+)=(["\'].*?["\']|\S+)', cmd)]
 
-        with subprocess.Popen(cmd_list, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, env=run_env) as proc:
+        with subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True,
+                              stderr=subprocess.PIPE, env=run_env) as proc:
             output, error = proc.communicate()
 
 
@@ -672,3 +674,85 @@ def add_spectra(speclist: list, outfile: str, **kwargs):
         raise RuntimeError(f'ERROR in addspec; Writing log to {logfile}')
 
     return f'{outfile}.pha'
+
+
+def parallelize(func, use_irun=True):
+    """A wrapper to make a function run in parallel
+    
+    Parameters
+    ----------
+    func: method
+        The method to parallelize. It can any args or kwargs.
+    use_irun: bool
+        If True, pass a keyword argument irun as int to func
+        that holds the call number in the sequence of parallel
+        calls. See description of the returned function below
+        
+
+    Return
+    ------
+    return a method with parameters that are lists of args/kwargs
+    to be passed to func. The returned method takes these special kwargs:
+    """
+
+    @functools.wraps(func)
+    def _parallelize(*args, **kwargs):
+
+        # remove special keywords:
+        irun = kwargs.pop('irun', None)
+        nproc = kwargs.pop('nproc', None)
+
+        # check that arguments are lists of the same length
+        arg0 = None
+        fargs = {str(arg):arg for arg in args}
+        fargs.update(**kwargs)
+        for key,arg in fargs.items():
+            if not isinstance(arg, list):
+                raise ValueError(f'{key} is expected to be a list')
+
+            if arg0 is not None and len(arg) != len(arg0):
+                raise ValueError('Expected lists of the same length: '
+                                 f'len({arg})!= len({arg0})')
+            arg0 = arg
+        ntasks = len(arg0)
+
+        if use_irun:
+            if irun is None:
+                irun = [1+it for it in range(ntasks)]
+            elif isinstance(irun, int):
+                irun = [irun+it for it in range(ntasks)]
+            elif isinstance(irun, (list, np.ndarray)):
+                if len(irun) != ntasks:
+                    raise ValueError(f'Expected irun length of {ntasks}')
+            else:
+                raise ValueError(f'{irun} should be either an int or a list '
+                                 'of length similar to number of calls')
+            kwargs['irun'] = irun
+
+        with Pool(nproc) as pool:
+            procs = [
+                pool.apply_async(
+                    func,
+                    args=[arg[it] for arg in args],
+                    kwds={key:val[it] for key,val in kwargs.items()}
+                )
+                for it in range(ntasks)
+            ]
+            results = [proc.get() for proc in procs]
+
+        return results
+    # Update the docstring
+    _parallelize.__doc__ = (func.__doc__ or '') + '\nExtra keywords:' + _P_EXTRA_DOC
+
+    return _parallelize
+
+
+_P_EXTRA_DOC = """
+    - irun: None, int or list to control the call number:
+        - None: generate a sequence [1, ntasks]
+        - int n: generate a sequence [n, n+ntasks]
+        - list of int: use as a sequence. It has to have
+        the correct length
+    - nproc: Number of parallel processes to use.
+"""
+parallelize.__doc__ += _P_EXTRA_DOC

@@ -1,3 +1,4 @@
+"""Test for aztools.misc"""
 import os
 import unittest
 
@@ -101,7 +102,7 @@ class MiscTest(unittest.TestCase):
 
 
     def test_group_array_1(self):
-        # [0,1,2,3,4,5,6,7,8]
+        """[0,1,2,3,4,5,6,7,8]"""
 
         xarr = np.arange(9)
         igrp = misc.group_array(xarr, by_n=[1, 1])
@@ -121,7 +122,7 @@ class MiscTest(unittest.TestCase):
 
 
     def test_group_array_2(self):
-        # [0,0,2,3,4,4,6,7,8]
+        """[0,0,2,3,4,4,6,7,8]"""
 
         xarr = np.arange(9)
         xarr[1] = 0
@@ -146,7 +147,7 @@ class MiscTest(unittest.TestCase):
 
 
     def test_group_array_3(self):
-        # [0,0,2,3,4,4,6,7,8]; bins
+        """[0,0,2,3,4,4,6,7,8]; bins"""
 
         xarr = np.arange(9)
         xarr[1] = 0
@@ -246,3 +247,48 @@ class MiscTest(unittest.TestCase):
         np.testing.assert_array_almost_equal(xerr, lcrv[2])
         if os.path.exists(fname):
             os.remove(fname)
+
+
+    @staticmethod
+    def _myf(avar, bvar=1.0):
+        """_myf docs"""
+        return avar+bvar
+    @staticmethod
+    def _myf2(avar, bvar=1.0, irun=None):
+        irun = 0
+        return avar+bvar+irun
+
+    def test_parallelize_input(self):
+        """test the input"""
+        _myf_p = misc.parallelize(self._myf)
+        with self.assertRaises(ValueError):
+            _myf_p(1.0)
+
+        with self.assertRaises(ValueError):
+            _myf_p(1.0, 4.0)
+
+        with self.assertRaises(ValueError):
+            _myf_p([1.0,2.0], [3.0,4.,5.])
+
+        with self.assertRaises(ValueError):
+            _myf_p([1.0,2.0], bvar=[3.0,4.,5.])
+
+
+    def test_parallelize_use_irun(self):
+        """test use_run"""
+        _myf_p = misc.parallelize(self._myf, use_irun=False)
+        np.testing.assert_array_almost_equal(_myf_p([1.0,2.0], bvar=[3.0,4.]), [4., 6.])
+
+        _myf_p = misc.parallelize(self._myf, use_irun=True)
+        with self.assertRaises(TypeError):
+            _myf_p([1.0,2.0], bvar=[3.0,4.])
+
+        _myf_p = misc.parallelize(self._myf2, use_irun=True)
+        np.testing.assert_array_almost_equal(_myf_p([1.0,2.0], bvar=[3.0,4.]), [4., 6.])
+
+
+    def test_parallelize_docstring(self):
+        """test __doc__"""
+        _myf_p = misc.parallelize(self._myf)
+        assert '_myf docs' in _myf_p.__doc__
+        assert 'irun: None, int or list' in _myf_p.__doc__

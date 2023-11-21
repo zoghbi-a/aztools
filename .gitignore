@@ -139,5 +139,15 @@ dask-worker-space/
 
 # tmp directory
 tmp/
+<<<<<<< before updating
 *png
 
+=======
+
+# Mac OS
+.DS_Store
+
+# Airspeed Velocity performance results
+_results/
+_html/
+>>>>>>> after updating
