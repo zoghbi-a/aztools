@@ -214,7 +214,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
     Keywords
     --------
     instr: str
-        Instrument or instrument mode: pn|mos|rgs|om
+        Instrument or instrument mode: pn|mos|rgs|omi|omf|omg
     odfingest: bool
         run odfingest? This should be True for the first run
         and False subsequently
@@ -226,8 +226,8 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
     # defaults
     instr = kwargs.pop('instr', 'pn')
-    if instr not in ['pn', 'mos', 'rgs', 'om']:
-        raise ValueError('instr need to be one of pn|mos|rgs|om')
+    if instr not in ['pn', 'mos', 'rgs', 'omi', 'omf', 'omg']:
+        raise ValueError('instr need to be one of pn|mos|rgs|omi|omf|omg')
     cwd = os.getcwd()
 
     try:
@@ -263,8 +263,12 @@ def process_xmm_obsid(obsid: str, **kwargs):
             kwargs.setdefault('bkgcorrect', 'no')
             kwargs.setdefault('withmlambdacolumn', 'yes')
             cmd = 'rgsproc'
-        elif instr == 'om':
-            cmd = 'omfchain'
+        elif instr == 'omi':
+            cmd = 'omichain'
+        elif instr == 'omf':
+            cmd = 'omichain'
+        elif instr == 'omg':
+            cmd = 'omgchain'
         else:
             raise ValueError('instr needs to be pn|om|rgs|om')
 
