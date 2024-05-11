@@ -255,20 +255,20 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
         # prepare the command
         if instr == 'pn':
-            cmd = 'epchain'
+            cmd = 'epproc'
         elif instr == 'mos':
-            cmd = 'emchain'
+            cmd = 'emproc'
         elif instr == 'rgs':
             kwargs.setdefault('orders', '"1 2"')
             kwargs.setdefault('bkgcorrect', 'no')
             kwargs.setdefault('withmlambdacolumn', 'yes')
             cmd = 'rgsproc'
         elif instr == 'omi':
-            cmd = 'omichain'
+            cmd = 'omiproc'
         elif instr == 'omf':
-            cmd = 'omichain'
+            cmd = 'omiproc'
         elif instr == 'omg':
-            cmd = 'omgchain'
+            cmd = 'omgproc'
         else:
             raise ValueError('instr needs to be pn|om|rgs|om')
 
@@ -278,7 +278,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
         # post run extra tasks
         if instr == 'pn':
-            evt = glob.glob('*PN*EVL*')
+            evt = glob.glob('*EPN_S*Evts*')
             if len(evt) != 1:
                 raise ValueError('Found >1 event files for pn')
             os.system(f'mv {evt[0]} {instr}.fits')
@@ -286,7 +286,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
         if instr == 'mos':
             for subi in [1, 2]:
-                evt = glob.glob(f'*M{subi}*MIEVL*')
+                evt = glob.glob(f'*EMOS{subi}_S*Evts*')
                 if len(evt) != 1:
                     raise ValueError(f'Found >1 event files for mos-{subi}')
                 os.system(f'mv {evt[0]} {instr}{subi}.fits')
