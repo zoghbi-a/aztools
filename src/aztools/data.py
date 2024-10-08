@@ -343,6 +343,8 @@ def filter_xmm_obsid(obsid: str, **kwargs):
     region: bool
         If True, create an image from the filtered file and launch
         ds9 to create a region file
+    use_raw: bool
+        If True, use RAWX, RAWY instead of X, Y
     
     """
     instr = kwargs.pop('instr', 'pn')
@@ -350,6 +352,7 @@ def filter_xmm_obsid(obsid: str, **kwargs):
     barycorr = kwargs.pop('barycorr', False)
     extra_expr = kwargs.pop('extra_expr', '')
     region = kwargs.pop('region', False)
+    use_raw = kwargs.pop('use_raw', False)
     if extra_expr != '' and '&&' not in extra_expr and '||' not in extra_expr:
         raise ValueError(('extra_expr has to contrain && or || '
                           'to connect to other expression'))
@@ -403,8 +406,9 @@ def filter_xmm_obsid(obsid: str, **kwargs):
         # region?
         if region:
             # create an image
+            pref = 'RAW' if use_raw else ''
             cmd = (f"evselect table={filtered_evt}:EVENTS withimageset=yes "
-                   "imageset=tmp.img xcolumn=X ycolumn=Y")
+                   f"imageset=tmp.img xcolumn={pref}X ycolumn={pref}Y")
             _run_sas_cmd(cmd, logfile='filter_xmm_image.log')
 
             # call ds9
@@ -443,6 +447,8 @@ def extract_xmm_spec(obsid: str, **kwargs):
     regfile: str
         name of region file. It should under: obsid/{instr}/; where instr
         is pn|mos1|mos2. Default is ds9.reg.
+    use_raw: bool
+        if True, region files uses RAWX, RAWY instead of X, Y
     extra_expr: str
         Extra filtering expression for evselect. e.g '&&gti("gtifile.gti",TIME)'.
         Note the &&.
@@ -455,6 +461,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
     # get keywords
     instr = kwargs.pop('instr', 'pn')
     regfile = kwargs.pop('regfile', 'ds9.reg')
+    use_raw = kwargs.pop('use_raw', False)
     extra_expr = kwargs.pop('extra_expr', '')
     genrsp = kwargs.pop('genrsp', True)
 
@@ -483,7 +490,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
         regfile = f'../{regfile}'
         if not os.path.exists(regfile):
             raise FileNotFoundError(f'{regfile} not found.')
-        selector = '(X,Y) IN '
+        selector = '(RAWX,RAWY) IN ' if use_raw else '(X,Y) IN '
         regions = ['', '']
         with open(regfile, encoding='utf8') as filep:
             for line in filep.readlines():
