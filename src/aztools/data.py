@@ -448,7 +448,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
         name of region file. It should under: obsid/{instr}/; where instr
         is pn|mos1|mos2. Default is ds9.reg.
     use_raw: bool
-        if True, region files uses RAWX, RAWY instead of X, Y
+        if True, region files uses RAWX, RAWY instead of X, Y; used in timing mode
     extra_expr: str
         Extra filtering expression for evselect. e.g '&&gti("gtifile.gti",TIME)'.
         Note the &&.
@@ -570,6 +570,8 @@ def extract_xmm_lc(obsid: str, **kwargs):
     regfile: str
         name of region file. It should under: obsid/{instr}/; where instr
         is pn|mos1|mos2. Default is ds9.reg.
+    use_raw: bool
+        if True, use RAWX, RAWY instead of X,Y (used in timing mode)
     extra_expr: str
         Extra filtering expression for evselect. e.g '&&gti("gtifile.gti",TIME)'.
         Note the &&.
@@ -586,6 +588,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
     ebins = kwargs.pop('ebins', '0.3 10')
     tbin = kwargs.pop('tbin', 1.0)
     regfile = kwargs.pop('regfile', 'ds9.reg')
+    use_raw = kwargs.pop('use_raw', False)
     extra_expr = kwargs.pop('extra_expr', '')
     lccorr = kwargs.pop('lccorr', True)
     outdir = kwargs.pop('outdir', 'lc')
@@ -621,7 +624,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
         regfile = f'../{regfile}'
         if not os.path.exists(regfile):
             raise FileNotFoundError(f'{regfile} not found.')
-        selector = '(X,Y) IN '
+        selector = '(RAWX,RAWY) IN ' if use_raw else '(X,Y) IN '
         regions = ['', '']
         with open(regfile, encoding='utf8') as filep:
             for line in filep.readlines():
