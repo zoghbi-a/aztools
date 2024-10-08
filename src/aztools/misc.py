@@ -5,7 +5,7 @@ import glob
 import os
 import subprocess
 from itertools import groupby
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from typing import Union
 
 try:
@@ -700,7 +700,7 @@ def parallelize(func, use_irun=True):
 
         # remove special keywords:
         irun = kwargs.pop('irun', None)
-        nproc = kwargs.pop('nproc', None)
+        nproc = kwargs.pop('nproc', cpu_count())
 
         # check that arguments are lists of the same length
         arg0 = None
@@ -715,6 +715,7 @@ def parallelize(func, use_irun=True):
                                  f'len({arg})!= len({arg0})')
             arg0 = arg
         ntasks = len(arg0)
+        nproc = min(nproc, ntasks)
 
         if use_irun:
             if irun is None:
