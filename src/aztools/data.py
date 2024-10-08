@@ -282,7 +282,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
             if len(evt) != 1:
                 raise ValueError('Found >1 event files for pn')
             os.system(f'mv {evt[0]} {instr}.fits')
-            print(f'{instr}.fits created successfully')
+            print(f'{obsid}:{instr}.fits created successfully')
 
         if instr == 'mos':
             for subi in [1, 2]:
@@ -290,7 +290,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
                 if len(evt) != 1:
                     raise ValueError(f'Found >1 event files for mos-{subi}')
                 os.system(f'mv {evt[0]} {instr}{subi}.fits')
-                print(f'{instr}{subi}.fits created successfully')
+                print(f'{obsid}:{instr}{subi}.fits created successfully')
 
         if instr == 'rgs':
             os.system('cp *R1*SRSPEC1* spec_r1.src')
@@ -304,7 +304,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
                    'rmf="spec_r1.rsp spec_r2.rsp" filepha="spec_rgs.src" filebkg="spec_rgs.bgd" '
                    'filermf="spec_rgs.rsp"')
             _run_sas_cmd(cmd, env, logfile='processing_xmm_rgscombine.log')
-            print('rgs spectra created successfully')
+            print(f'{obsid}:rgs spectra created successfully')
 
         os.chdir(cwd)
 
@@ -412,13 +412,13 @@ def filter_xmm_obsid(obsid: str, **kwargs):
             _run_sas_cmd(cmd, logfile='filter_xmm_image.log')
 
             # call ds9
-            print('launching ds9')
+            print(f'{obsid}: launching ds9')
             ret = os.system('ds9 tmp.img -log -zoom 2 -cmap heat')
             if ret != 0:
                 raise RuntimeError('Failed launching ds9')
 
         os.chdir(cwd)
-        print(f'{filtered_evt} created successfully')
+        print(f'{obsid}:{filtered_evt} created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
@@ -537,7 +537,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
             _run_sas_cmd(cmd, env, logfile='extract_xmm_spec_grp.log')
 
         os.chdir(cwd)
-        print(f'spectra {prefix}* created successfully')
+        print(f'spectra {obsid}:{prefix}* created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
@@ -667,7 +667,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
                 _run_sas_cmd(cmd, env, logfile='extract_xmm_lc_corr.log')
 
         os.chdir(cwd)
-        print(f'Light cruves {prefix}* created successfully')
+        print(f'Light cruves {obsid}:{prefix}* created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
         os.chdir(cwd)
@@ -775,7 +775,7 @@ def extract_nustar_spec(obsid: str, **kwargs):
             out = hsp.nuproducts(**in_pars) # pylint: disable=no-member
 
         if out.returncode == 0:
-            print(f'spectra sucessfully extracted for {obsid}-{instr.lower()}!')
+            print(f'spectra sucessfully extracted for {obsid}:{instr.lower()}!')
         else:
             logfile = f'extract_nustar_spec_{obsid}-{instr.lower()}.log'
             print(f'ERROR processing {obsid}; Writing log to {logfile}')
@@ -946,7 +946,7 @@ def extract_nustar_lc(obsid: str, **kwargs):
                     if out.returncode != 0:
                         raise RuntimeError(str(out))
 
-                print(f'light curve sucessfully extracted for {obsid}-{instr}-e{ien+1}!')
+                print(f'light curve sucessfully extracted for {obsid}:{instr}-e{ien+1}!')
             except RuntimeError as exception:
                 logfile = f'extract_nustar_lc_{obsid}-{instr}-e{ien+1}.log'
                 print(f'ERROR processing {obsid}; Writing log to {logfile}')
