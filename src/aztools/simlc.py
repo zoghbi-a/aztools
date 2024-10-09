@@ -5,7 +5,7 @@ from typing import Callable, Union
 
 import numpy as np
 import scipy.stats as st
-from numpy.random import RandomState
+from numpy import random
 
 __all__ = ['SimLC']
 
@@ -45,7 +45,7 @@ class SimLC:
 
 
         # seed random generator #
-        self.rng = RandomState(seed)
+        self.rng = random.RandomState(seed)
 
 
     def add_model(self,
