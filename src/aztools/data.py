@@ -197,7 +197,11 @@ def _run_sas_cmd(cmd, *args, **kwargs):
     if 'SAS_DIR' not in os.environ:
         raise KeyError('SAS_DIR is not defined')
 
-    pre_cmd = 'source $SAS_DIR/sas-setup.sh; '
+    if os.system('sasversion > /dev/null 2>&1') != 0:
+        raise KeyError('SAS is not initialized.')
+
+    #pre_cmd = 'source $SAS_DIR/sas-setup.sh; '
+    pre_cmd = ''
     return run_cmd_line_tool(pre_cmd + cmd, *args, **kwargs)
 
 
@@ -218,11 +222,15 @@ def process_xmm_obsid(obsid: str, **kwargs):
     odfingest: bool
         run odfingest? This should be True for the first run
         and False subsequently
+    allow_fail: bool
+        Allow task to fail without raising an exception. May be useful
+        during paralleization. Default: False
     Any parameters to be passed to the reduction pipeline
     
     
     """
     odfingest = kwargs.pop('odfingest', True)
+    allow_fail = kwargs.pop('allow_fail', False)
 
     # defaults
     instr = kwargs.pop('instr', 'pn')
@@ -242,7 +250,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
             if len(glob.glob('*gz')) > 0:
                 os.system('gzip -d *gz')
             cmd = 'cifbuild withccfpath=no analysisdate=now category=XMMCCF fullpath=yes'
-            _run_sas_cmd(cmd, env, logfile='processing_xmm_cifbuild.log')
+            _run_sas_cmd(cmd, env, logfile='processing_xmm_cifbuild.log', allow_fail=allow_fail)
 
         env['SAS_CCF'] = f'{os.getcwd()}/ccf.cif'
 
@@ -250,7 +258,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
             os.system('rm *.SAS')
         if odfingest:
             cmd = f'odfingest odfdir={os.getcwd()} outdir={os.getcwd()}'
-            _run_sas_cmd(cmd, env, logfile='processing_xmm_odfingest.log')
+            _run_sas_cmd(cmd, env, logfile='processing_xmm_odfingest.log', allow_fail=allow_fail)
 
 
         # prepare the command
@@ -274,7 +282,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
         # the following will raise RuntimeError if the task fails
         cmd = f'{cmd} {" ".join([f"{par}={val}" for par,val in kwargs.items()])}'
-        _run_sas_cmd(cmd, env, logfile=f'processing_xmm_{instr}.log')
+        _run_sas_cmd(cmd, env, logfile=f'processing_xmm_{instr}.log', allow_fail=allow_fail)
 
         # post run extra tasks
         if instr == 'pn':
@@ -303,7 +311,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
             cmd = ('rgscombine pha="spec_r1.src spec_r2.src" bkg="spec_r1.bgd spec_r2.bgd" '
                    'rmf="spec_r1.rsp spec_r2.rsp" filepha="spec_rgs.src" filebkg="spec_rgs.bgd" '
                    'filermf="spec_rgs.rsp"')
-            _run_sas_cmd(cmd, env, logfile='processing_xmm_rgscombine.log')
+            _run_sas_cmd(cmd, env, logfile='processing_xmm_rgscombine.log', allow_fail=allow_fail)
             print(f'{obsid}:rgs spectra created successfully')
 
         os.chdir(cwd)
@@ -345,6 +353,9 @@ def filter_xmm_obsid(obsid: str, **kwargs):
         ds9 to create a region file
     use_raw: bool
         If True, use RAWX, RAWY instead of X, Y
+    allow_fail: bool
+        Allow task to fail without raising an exception. May be useful
+        during paralleization. Default: False
     
     """
     instr = kwargs.pop('instr', 'pn')
@@ -353,6 +364,7 @@ def filter_xmm_obsid(obsid: str, **kwargs):
     extra_expr = kwargs.pop('extra_expr', '')
     region = kwargs.pop('region', False)
     use_raw = kwargs.pop('use_raw', False)
+    allow_fail = kwargs.pop('allow_fail', False)
     if extra_expr != '' and '&&' not in extra_expr and '||' not in extra_expr:
         raise ValueError(('extra_expr has to contrain && or || '
                           'to connect to other expression'))
@@ -377,31 +389,31 @@ def filter_xmm_obsid(obsid: str, **kwargs):
         }
 
         cmd = (
-            f"evselect table={evt}:EVENTS withrateset=yes rateset=tmp.rate " 
+            f"evselect table={evt}:EVENTS withrateset=yes rateset=tmp.rate "
             f"expression='(PI {foptions[instr[:3]][0]})&&(PATTERN==0)&&"
             f"#XMMEA_{foptions[instr[:3]][1]}' "
             "makeratecolumn=yes maketimecolumn=yes timebinsize=100"
         )
-        _run_sas_cmd(cmd, logfile='filter_xmm_evselect.log')
+        _run_sas_cmd(cmd, logfile='filter_xmm_evselect.log', allow_fail=allow_fail)
 
         # generate GTI
         expr = gtiexpr or f'RATE < {foptions[instr[:3]][3]}'
         cmd = ('tabgtigen table=tmp.rate gtiset=tmp.gti '
                f'expression="RATE<{foptions[instr[:3]][3]}"')
-        _run_sas_cmd(cmd, logfile='filter_xmm_tabgtigen.log')
+        _run_sas_cmd(cmd, logfile='filter_xmm_tabgtigen.log', allow_fail=allow_fail)
 
         # apply GTI
         expr = ('gti(tmp.gti,TIME)&&(PI IN [200:12000])&&(FLAG==0)&&'
                 f'(PATTERN<={foptions[instr[:3]][2]}){extra_expr}')
         cmd = (f"evselect table={evt}:EVENTS withfilteredset=yes "
                f"filteredset={filtered_evt} expression='{expr}'")
-        _run_sas_cmd(cmd, logfile='filter_xmm_evselect2.log')
+        _run_sas_cmd(cmd, logfile='filter_xmm_evselect2.log', allow_fail=allow_fail)
 
         # barycenter corrections? #
         if barycorr:
             os.system(f'cp {filtered_evt} {instr}_filtered_nobary.fits'.format(instr))
             cmd = f'barycen table={filtered_evt}:EVENTS'
-            _run_sas_cmd(cmd, logfile='filter_xmm_barycen.log')
+            _run_sas_cmd(cmd, logfile='filter_xmm_barycen.log', allow_fail=allow_fail)
 
         # region?
         if region:
@@ -409,7 +421,7 @@ def filter_xmm_obsid(obsid: str, **kwargs):
             pref = 'RAW' if use_raw else ''
             cmd = (f"evselect table={filtered_evt}:EVENTS withimageset=yes "
                    f"imageset=tmp.img xcolumn={pref}X ycolumn={pref}Y")
-            _run_sas_cmd(cmd, logfile='filter_xmm_image.log')
+            _run_sas_cmd(cmd, logfile='filter_xmm_image.log', allow_fail=allow_fail)
 
             # call ds9
             print(f'{obsid}: launching ds9')
@@ -454,6 +466,9 @@ def extract_xmm_spec(obsid: str, **kwargs):
         Note the &&.
     genrsp: bool
         Generate rmf and arf files.
+    allow_fail: bool
+        Allow task to fail without raising an exception. May be useful
+        during paralleization. Default: False
     irun: int
         name suffix, so the output is spec_{irun}*
     
@@ -464,6 +479,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
     use_raw = kwargs.pop('use_raw', False)
     extra_expr = kwargs.pop('extra_expr', '')
     genrsp = kwargs.pop('genrsp', True)
+    allow_fail = kwargs.pop('allow_fail', False)
 
     # check keywords
     if instr not in ['pn', 'mos1', 'mos2']:
@@ -481,7 +497,9 @@ def extract_xmm_spec(obsid: str, **kwargs):
 
     try:
         os.system(f'mkdir -p {obsid}/{instr}/spec')
-        os.chdir(f'{obsid}/{instr}/spec')
+        tmpdir = f'{obsid}/{instr}/tmp.{prefix}'
+        os.system(f'mkdir -p {tmpdir}')
+        os.chdir(tmpdir)
         filtered_evt = f'../{instr}_filtered.fits'
         if not os.path.exists(filtered_evt):
             raise FileNotFoundError(f'{obsid}/{instr}/{instr}_filtered.fits not found')
@@ -515,28 +533,30 @@ def extract_xmm_spec(obsid: str, **kwargs):
                    'energycolumn=PI spectralbinsize=5 withspecranges=yes '
                    f'specchannelmin=0 specchannelmax={maxchan}'
             )
-            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_spec_{lab}.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_{lab}.log', allow_fail=allow_fail)
             # backscale
             cmd = f'backscale spectrumset={prefix}.{lab} badpixlocation={filtered_evt}'
-            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_spec_{lab}_backscale.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_{lab}_backscale.log', allow_fail=allow_fail)
 
         if genrsp:
             # response
             cmd = f'rmfgen spectrumset={prefix}.pha rmfset={prefix}.rmf'
-            _run_sas_cmd(cmd, env, logfile='extract_xmm_spec_rmf.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_rmf.log', allow_fail=allow_fail)
 
             # arf
             cmd = (f'arfgen spectrumset={prefix}.pha arfset={prefix}.arf withrmfset=yes '
                    f'rmfset={prefix}.rmf badpixlocation={filtered_evt} detmaptype=psf')
-            _run_sas_cmd(cmd, env, logfile='extract_xmm_spec_arf.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_arf.log', allow_fail=allow_fail)
 
             # group spectra
             cmd = (f'specgroup spectrumset={prefix}.pha rmfset={prefix}.rmf '
                    f'backgndset={prefix}.bgd arfset={prefix}.arf groupedset={prefix}.grp '
                    'minSN=6 oversample=3')
-            _run_sas_cmd(cmd, env, logfile='extract_xmm_spec_grp.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_grp.log', allow_fail=allow_fail)
 
+        os.system('mv * ../spec')
         os.chdir(cwd)
+        os.system(f'rm -f {tmpdir}')
         print(f'spectra {obsid}:{prefix}* created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
@@ -579,6 +599,9 @@ def extract_xmm_lc(obsid: str, **kwargs):
         Run epiclccorr. Default is True.
     outdir: str
         output folder name under {obsid}/{instr}/. Default is lc.
+    allow_fail: bool
+        Allow task to fail without raising an exception. May be useful
+        during paralleization. Default: False
     irun: int
         name suffix so the output file is lc_{irun}*
     
@@ -592,6 +615,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
     extra_expr = kwargs.pop('extra_expr', '')
     lccorr = kwargs.pop('lccorr', True)
     outdir = kwargs.pop('outdir', 'lc')
+    allow_fail = kwargs.pop('allow_fail', False)
     irun = kwargs.get('irun', None)
 
     # check keywords
@@ -652,7 +676,7 @@ def extract_xmm_lc(obsid: str, **kwargs):
             cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
                    f'rateset={src} expression="{expr}" makeratecolumn=yes '
                    f'maketimecolumn=yes timebinsize={tbin}')
-            _run_sas_cmd(cmd, env, logfile='extract_xmm_lc_src.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_src.log', allow_fail=allow_fail)
 
 
             # extract bgd lc
@@ -660,14 +684,14 @@ def extract_xmm_lc(obsid: str, **kwargs):
             cmd = (f'evselect table={filtered_evt}:EVENTS withrateset=yes '
                    f'rateset={bgd} expression="{expr}" makeratecolumn=yes '
                    f'maketimecolumn=yes timebinsize={tbin}')
-            _run_sas_cmd(cmd, env, logfile='extract_xmm_lc_bgd.log')
+            _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_bgd.log', allow_fail=allow_fail)
 
 
             # correct lc
             if lccorr:
                 cmd = (f'epiclccorr srctslist={src} eventlist={filtered_evt} outset={smb} '
                        f'withbkgset=yes bkgtslist={bgd} applyabsolutecorrections=no')
-                _run_sas_cmd(cmd, env, logfile='extract_xmm_lc_corr.log')
+                _run_sas_cmd(cmd, env, logfile=f'extract_xmm_{prefix}_corr.log', allow_fail=allow_fail)
 
         os.chdir(cwd)
         print(f'Light cruves {obsid}:{prefix}* created successfully')
@@ -780,7 +804,7 @@ def extract_nustar_spec(obsid: str, **kwargs):
         if out.returncode == 0:
             print(f'spectra sucessfully extracted for {obsid}:{instr.lower()}!')
         else:
-            logfile = f'extract_nustar_spec_{obsid}-{instr.lower()}.log'
+            logfile = f'extract_nustar_{prefix}_{obsid}-{instr.lower()}.log'
             print(f'ERROR processing {obsid}; Writing log to {logfile}')
             with open(logfile, 'w', encoding='utf8') as filep:
                 filep.write(str(out))
@@ -951,7 +975,7 @@ def extract_nustar_lc(obsid: str, **kwargs):
 
                 print(f'light curve sucessfully extracted for {obsid}:{instr}-e{ien+1}!')
             except RuntimeError as exception:
-                logfile = f'extract_nustar_lc_{obsid}-{instr}-e{ien+1}.log'
+                logfile = f'extract_nustar_{prefix}_{obsid}-{instr}-e{ien+1}.log'
                 print(f'ERROR processing {obsid}; Writing log to {logfile}')
                 with open(logfile, 'w', encoding='utf8') as filep:
                     filep.write(str(exception))
@@ -1046,7 +1070,7 @@ def extract_nicer_spec(obsid: str, **kwargs):
                 filep.writeto(f'{outdir}/{prefix}_{blabel}.pha', overwrite=True)
 
         else:
-            logfile = f'extract_nicer_spec_{obsid}_{blabel}.log'
+            logfile = f'extract_nicer_{prefix}_{obsid}_{blabel}.log'
             print(f'ERROR provessing {obsid}; Writing log to {logfile}')
             with open(logfile, 'w', encoding='utf8') as filep:
                 filep.write(str(out))
