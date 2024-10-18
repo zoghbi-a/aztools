@@ -286,15 +286,19 @@ def process_xmm_obsid(obsid: str, **kwargs):
 
         # post run extra tasks
         if instr == 'pn':
-            evt = glob.glob('*EPN_S*Evts*')
+            evt = glob.glob('*EPN_S*_Evts.ds')
+            if len(evt) == 0:
+                evt = glob.glob('*EPN_*ImagingEvts.ds')
             if len(evt) != 1:
-                raise ValueError('Found >1 event files for pn')
+                raise ValueError(f'Found >1 event files for pn for {obsid}')
             os.system(f'mv {evt[0]} {instr}.fits')
             print(f'{obsid}:{instr}.fits created successfully')
 
         if instr == 'mos':
             for subi in [1, 2]:
-                evt = glob.glob(f'*EMOS{subi}_S*Evts*')
+                evt = glob.glob(f'*EMOS{subi}_S*_Evts.ds')
+                if len(evt) == 0:
+                    evt = glob.glob('*EMOS{subi}_*ImagingEvts.ds')
                 if len(evt) != 1:
                     raise ValueError(f'Found >1 event files for mos-{subi}')
                 os.system(f'mv {evt[0]} {instr}{subi}.fits')
@@ -423,9 +427,20 @@ def filter_xmm_obsid(obsid: str, **kwargs):
                    f"imageset=tmp.img xcolumn={pref}X ycolumn={pref}Y")
             _run_sas_cmd(cmd, logfile='filter_xmm_image.log', allow_fail=allow_fail)
 
+            # create a starting region file
+            with fits.open(filtered_evt) as fp:
+                ra = fp['events'].header['ra_obj']
+                dec = fp['events'].header['dec_obj']
+            reg = '# Region file format: DS9 version 4.1\nfk5\n'
+            reg += f'circle({ra},{dec},50")\n'
+            reg += f'circle({ra+0.04},{dec+0.04},50") # background\n'
+            reg += f'circle({ra+0.06},{dec+0.06},50") # background\n'
+            with open('tmp.reg', 'w', encoding='utf8') as fp:
+                fp.write(reg)
+
             # call ds9
             print(f'{obsid}: launching ds9')
-            ret = os.system('ds9 tmp.img -log -zoom 2 -cmap heat')
+            ret = os.system('ds9 tmp.img -log -zoom 2 -cmap heat -mode region -region load tmp.reg')
             if ret != 0:
                 raise RuntimeError('Failed launching ds9')
 
@@ -556,7 +571,7 @@ def extract_xmm_spec(obsid: str, **kwargs):
 
         os.system('mv * ../spec')
         os.chdir(cwd)
-        os.system(f'rm -f {tmpdir}')
+        os.system(f'rm -rf {tmpdir}')
         print(f'spectra {obsid}:{prefix}* created successfully')
 
     except Exception as exception: # pylint: disable=broad-exception-caught
