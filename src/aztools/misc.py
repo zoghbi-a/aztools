@@ -4,6 +4,7 @@ import functools
 import glob
 import os
 import subprocess
+import tempfile
 from itertools import groupby
 from multiprocessing import Pool, cpu_count
 from typing import Union
@@ -564,7 +565,7 @@ def run_cmd_line_tool(cmd: str,
     Parameters
     ----------
     cmd: str
-        The command strign to be run where the parameters are in the string
+        The command string to be run where the parameters are in the string
     env: dict
         Dictionary of environment variables to be used by the task
     allow_fail: bool
@@ -582,7 +583,8 @@ def run_cmd_line_tool(cmd: str,
     try:
 
         with subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True,
-                              stderr=subprocess.PIPE, env=run_env) as proc:
+                            stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env=run_env) as proc:
             output, error = proc.communicate()
 
 
@@ -682,7 +684,7 @@ def parallelize(func, use_irun=True):
     Parameters
     ----------
     func: method
-        The method to parallelize. It can any args or kwargs.
+        The method to parallelize. It can have any args or kwargs.
     use_irun: bool
         If True, pass a keyword argument irun as int to func
         that holds the call number in the sequence of parallel
@@ -757,3 +759,32 @@ _P_EXTRA_DOC = """
     - nproc: Number of parallel processes to use.
 """
 parallelize.__doc__ += _P_EXTRA_DOC
+
+
+def call_xspec(xcmfile: str, logfile: str = None):
+    """Call xspec on xcm file
+    
+    Parameters
+    ----------
+    xcmfile: str
+        The name of the xcm file to run; Note that xspec
+        will alway run from the current working location.
+    logfile: str
+        Name of the log file. If None, no output will be printed
+    """
+    if not os.path.exists(xcmfile):
+        raise ValueError(f'xcm file {xcmfile} cannot be found')
+
+    if os.system('which xspec > /dev/null 2>&1') != 0:
+        raise RuntimeError('Cannot run xspec; make sure it is installed')
+
+    with tempfile.NamedTemporaryFile('w', delete_on_close=False, suffix='.xcm') as fp:
+        with open(xcmfile, encoding='utf8') as fp2:
+            fp.write(fp2.read())
+        fp.write('\nexit')
+        fp.close()
+
+        run_cmd_line_tool(f'xspec - {fp.name}', logfile=logfile)
+
+# parallel version of run_xspec
+run_xspecs = parallelize(call_xspec, use_irun=False)
