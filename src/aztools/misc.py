@@ -761,8 +761,8 @@ _P_EXTRA_DOC = """
 parallelize.__doc__ += _P_EXTRA_DOC
 
 
-def call_xspec(xcmfile: str, logfile: str = None):
-    """Call xspec on xcm file
+def call_xspec(xcmfile: str, logfile: str = None, quiet: bool = False):
+    """Call the command line xspec on the give xcm file
     
     Parameters
     ----------
@@ -771,6 +771,8 @@ def call_xspec(xcmfile: str, logfile: str = None):
         will alway run from the current working location.
     logfile: str
         Name of the log file. If None, no output will be printed
+    quiet: bool
+        If False, ignore errors. Default: True, i.e. raise for errors
     """
     if not os.path.exists(xcmfile):
         raise ValueError(f'xcm file {xcmfile} cannot be found')
@@ -778,13 +780,18 @@ def call_xspec(xcmfile: str, logfile: str = None):
     if os.system('which xspec > /dev/null 2>&1') != 0:
         raise RuntimeError('Cannot run xspec; make sure it is installed')
 
-    with tempfile.NamedTemporaryFile('w', delete_on_close=False, suffix='.xcm') as fp:
+    with tempfile.NamedTemporaryFile('w', delete=False, suffix='.xcm') as fp:
         with open(xcmfile, encoding='utf8') as fp2:
             fp.write(fp2.read())
         fp.write('\nexit')
         fp.close()
 
-        run_cmd_line_tool(f'xspec - {fp.name}', logfile=logfile)
+        out = run_cmd_line_tool(f'xspec - {fp.name}', logfile=logfile)
+        os.remove(fp.name)
+    error = out['error']
+    if len(error) and not quiet:
+        raise RuntimeError(f'xspec failed:\n{error}')
+    return out
 
 # parallel version of run_xspec
-run_xspecs = parallelize(call_xspec, use_irun=False)
+call_xspecs = parallelize(call_xspec, use_irun=False)
