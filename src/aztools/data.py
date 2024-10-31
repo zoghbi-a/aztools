@@ -260,6 +260,9 @@ def process_xmm_obsid(obsid: str, **kwargs):
             cmd = f'odfingest odfdir={os.getcwd()} outdir={os.getcwd()}'
             _run_sas_cmd(cmd, env, logfile='processing_xmm_odfingest.log', allow_fail=allow_fail)
 
+        if instr[:2] == 'om':
+            # om tasks require SAS_ODF to point the .SAS summary file
+            env['SAS_ODF'] = glob.glob(f"{env['SAS_ODF']}/*SAS")[0]
 
         # prepare the command
         if instr == 'pn':
@@ -272,11 +275,11 @@ def process_xmm_obsid(obsid: str, **kwargs):
             kwargs.setdefault('withmlambdacolumn', 'yes')
             cmd = 'rgsproc'
         elif instr == 'omi':
-            cmd = 'omiproc'
+            cmd = 'omichain'
         elif instr == 'omf':
-            cmd = 'omiproc'
+            cmd = 'omichain'
         elif instr == 'omg':
-            cmd = 'omgproc'
+            cmd = 'omgchain'
         else:
             raise ValueError('instr needs to be pn|om|rgs|om')
 
