@@ -772,7 +772,7 @@ def call_xspec(xcmfile: str, logfile: str = None, quiet: bool = False):
     logfile: str
         Name of the log file. If None, no output will be printed
     quiet: bool
-        If False, ignore errors. Default: True, i.e. raise for errors
+        If True, ignore errors. Default: False, i.e. raise for errors
     """
     if not os.path.exists(xcmfile):
         raise ValueError(f'xcm file {xcmfile} cannot be found')
@@ -790,7 +790,7 @@ def call_xspec(xcmfile: str, logfile: str = None, quiet: bool = False):
         os.remove(fp.name)
     error = out['error']
     if len(error) and not quiet:
-        raise RuntimeError(f'xspec failed:\n{error}')
+        raise RuntimeError(f'xspec failed for {xcmfile}:\n{error}')
     return out
 
 # parallel version of run_xspec
