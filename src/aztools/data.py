@@ -277,7 +277,7 @@ def process_xmm_obsid(obsid: str, **kwargs):
         elif instr == 'omi':
             cmd = 'omichain'
         elif instr == 'omf':
-            cmd = 'omichain'
+            cmd = 'omfchain'
         elif instr == 'omg':
             cmd = 'omgchain'
         else:
