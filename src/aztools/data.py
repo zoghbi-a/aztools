@@ -2,6 +2,7 @@
 
 import glob
 import os
+import subprocess
 
 import numpy as np
 from astropy.io import fits
@@ -1098,3 +1099,159 @@ def extract_nicer_spec(obsid: str, **kwargs):
 
 # parallel version of extract_nustar_lc
 extract_nicer_specs = parallelize(extract_nicer_spec, use_irun=True)
+
+
+def extract_suzaku_xis_spec(obsid: str, **kwargs):
+    """Extract Suzaku XIS spectra for obsid with xselect
+
+    Run from top level containting obsid folder
+
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
+
+    Keywords
+    --------
+    processed_obsid: str
+        The name of the processed obsid folder. Default: {obsid}_p
+    src_radius: float
+        Radius of source region in arcsec; default 100"
+    mode: str
+        Spectral response mode. slow|medium|fast to be passed to xisresp.
+        Default is medium.
+    min_snr: int
+        Minimum SNR to be used when grouping the spectra with ftgrouppha.
+        Default: 6
+    irun: int
+        name suffix so the output is spec_{irun}*
+    
+    Any parameters to be passed to the reduction pipeline
+
+    Return
+    ------
+    0 if succesful, and a heasoft error code otherwise
+
+    """
+    if hsp is None:
+        raise ImportError('extract_nustar_spec depends on heasoftpy. Install it first')
+
+    processed_obsid = kwargs.pop('processed_obsid', None)
+    irun = kwargs.pop('irun', None)
+    src_radius = kwargs.pop('src_radius', 100)
+    mode = kwargs.pop('mode', 'medium')
+    min_snr = kwargs.pop('min_snr', 6)
+
+    prefix = 'spec'
+    if irun is not None:
+        prefix += f'_{irun}'
+    if processed_obsid is None:
+        processed_obsid = f'{obsid}_p'
+    if mode not in ['fast', 'medium', 'slow']:
+        raise ValueError('mode needs to be one of: slow|medium|fast')
+
+
+    outdir = f'{processed_obsid}/spec'
+    os.system(f'mkdir -p {outdir}')
+    cwd = os.getcwd()
+    os.chdir(outdir)
+    try:
+
+        # get ra and dec of the object
+        evtfiles = glob.glob(f'../xis/event_cl/ae{obsid}xi*_cl.evt')
+        if len(evtfiles) == 0:
+            raise ValueError('No event files found in xis/event_cl')
+        evtfile = evtfiles[0]
+        for evtfile in evtfiles:
+            if os.path.exists(evtfile):
+                break
+        with fits.open(evtfile) as filep:
+            obj_ra  = filep['events'].header['ra_obj'] # pylint: disable=no-member
+            obj_dec = filep['events'].header['dec_obj'] # pylint: disable=no-member
+
+        # write source and background region files
+        src_reg = ('# Region file format: DS9 version 4.1\nfk5\n'
+                f'circle({obj_ra},{obj_dec},{src_radius}")\n')
+        bgd_reg = ('# Region file format: DS9 version 4.1\nfk5\n'
+                f'annulus({obj_ra},{obj_dec},{src_radius*3}",{src_radius*6}")')
+        with open('src.reg', 'w', encoding='utf-8') as fp:
+            fp.write(src_reg)
+        with open('bgd.reg', 'w', encoding='utf-8') as fp:
+            fp.write(bgd_reg)
+
+        # check for xisresp: the response generatation script
+        if os.system('which xisresp > /dev/null 2>&1') != 0:
+            msg = ('Missing xisresp; Download from '
+                    'https://heasarc.gsfc.nasa.gov/docs/suzaku/analysis/xisresp')
+            raise RuntimeError(msg)
+
+        # get the spectra for the three xis instruments
+        for instr in ['xi0', 'xi1', 'xi3']:
+            root = f'{prefix}_{instr.lower()}'
+            if len(glob.glob(f'{root}.???')) == 3:
+                # nothing to do, spectra alreay exist
+                continue
+            evts = '\n'.join([f'read event {os.path.basename(evt)} {os.path.dirname(evt)}'
+                                for evt in evtfiles if instr in evt])
+            xsel = (
+                f'tmp_{root}\n'
+                f'{evts}\n'
+                f'filter region src.reg\n'
+                f'extract spec\nsave spec {root}.pha group=no resp=no\n'
+                f'clear region\nfilter region bgd.reg\n'
+                f'extract spec\nsave spec {root}.bgd group=no resp=no\n'
+                'exit\nno'
+            )
+            with subprocess.Popen("xselect", stdout=subprocess.PIPE,
+                                    stdin=subprocess.PIPE) as proc:
+                proc.communicate(xsel.encode())
+                proc.wait()
+
+            if proc.returncode == 0:
+                print(f'spectra sucessfully extracted for {obsid}:{instr.lower()}!')
+            else:
+                logfile = f'extract_suzaku_spec_{root}_{obsid}.log'
+                print(f'ERROR processing {obsid}; Writing log to {logfile}')
+                with open(logfile, 'w', encoding='utf8') as filep:
+                    filep.write(proc.stdout.decode() + '\n++++ stderr++++\n' + proc.stderr.decode())
+                return proc.returncode
+
+            # generate the response; last yes is for debug to keep the files
+            # used to bin the spectra; run first with debug=no (last option),
+            # then run with debug=yes to leave chanfile.txt and energyfile.txt
+            # to be used to bin the background
+            run_cmd_line_tool(f'xisresp {root}.pha {mode} src.reg no yes no', allow_fail=False)
+            run_cmd_line_tool(f'mv {root}.rsp {root}.rsp.bak')
+            run_cmd_line_tool(f'xisresp {root}.pha {mode} src.reg no no yes', allow_fail=False)
+            run_cmd_line_tool(f'mv {root}.rsp.bak {root}.rsp')
+
+            # rebin the background accordingly
+            if mode != 'slow':
+                hsp.ftrbnpha(infile=f'{root}.bgd', outfile=f'{root}_tmp.bgd',
+                    binfile='chanfile.txt', properr='yes', clobber='yes', noprompt=True)
+                run_cmd_line_tool(f'mv {root}_tmp.bgd {root}.bgd')
+
+            # group the spectra
+            hsp.ftgrouppha(infile=f'{root}.pha', backfile=f'{root}.bgd', outfile=f'{root}.grp',
+                grouptype='optsnmin', respfile=f'{root}.rsp', groupscale=min_snr, clobber='yes')
+
+        # combine xi0, xi3 to get front-illuminated (fi) spectra
+        if os.path.exists(f'{prefix}_xi0.grp') and os.path.exists(f'{prefix}_xi3.grp'):
+            with open('tmp.add', 'w', encoding='utf-8') as fp:
+                fp.write(f'{prefix}_xi0.grp\n{prefix}_xi3.grp')
+            hsp.addspec(infil='tmp.add', outfil=f'{prefix}_fi',
+                qaddrmf='yes', qsubback='yes', clobber='yes')
+            # group the spectra
+            hsp.ftgrouppha(
+                infile=f'{prefix}_fi.pha', outfile=f'{prefix}_fi.grp',
+                grouptype='optsnmin', respfile=f'{prefix}_fi.rsp',
+                groupscale=min_snr, clobber='yes'
+            )
+    finally:
+        os.chdir(cwd)
+
+    return 0
+
+# parallel version of extract_suzaku_xis_spec
+extract_suzaku_xis_specs = parallelize(extract_suzaku_xis_spec, use_irun=True)
