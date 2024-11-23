@@ -1204,7 +1204,7 @@ def extract_suzaku_xis_spec(obsid: str, **kwargs):
                 'exit\nno'
             )
             with subprocess.Popen("xselect", stdout=subprocess.PIPE,
-                                    stdin=subprocess.PIPE) as proc:
+                                    stderr=subprocess.PIPE,stdin=subprocess.PIPE) as proc:
                 proc.communicate(xsel.encode())
                 proc.wait()
 
@@ -1255,3 +1255,173 @@ def extract_suzaku_xis_spec(obsid: str, **kwargs):
 
 # parallel version of extract_suzaku_xis_spec
 extract_suzaku_xis_specs = parallelize(extract_suzaku_xis_spec, use_irun=True)
+
+def extract_suzaku_xis_lc(obsid: str, **kwargs):
+    """Extract Suzaku XIS light curve for obsid with xselect
+
+    Run from top level containting obsid folder
+    Assume the spectra are available so they can be used to get
+    the background scaling
+
+    Parameters
+    ----------
+    obsid: str
+        Obsid to be processed; or {obsid}:{label} where output
+        is spec_{label}*
+
+    Keywords
+    --------
+    processed_obsid: str
+        The name of the processed obsid folder. Default: {obsid}_p
+    ebins: str
+        Space-separated string of the energy bin boundaries in keV. Default is '2 10'
+    tbin: float
+        The time bin, negative means 2**tbin
+    src_radius: float
+        Radius of source region in arcsec; default 100"
+    outdir: str
+        Name of the output folder. Default 'lc', so the output
+        is under {processed_obsid}/lc
+    irun: int
+        name suffix so the output is spec_{irun}*
+    
+    Any parameters to be passed to the reduction pipeline
+
+    Return
+    ------
+    0 if succesful, and a heasoft error code otherwise
+
+    """
+    if hsp is None:
+        raise ImportError('extract_nustar_spec depends on heasoftpy. Install it first')
+
+    processed_obsid = kwargs.pop('processed_obsid', None)
+    irun = kwargs.pop('irun', None)
+    src_radius = kwargs.pop('src_radius', 100)
+    tbin = kwargs.pop('tbin', 128.0)
+    ebins = kwargs.pop('ebins', '2 10')
+    outdir = kwargs.pop('outdir', 'lc')
+
+    prefix = 'lc'
+    if irun is not None:
+        prefix += f'_{irun}'
+    if processed_obsid is None:
+        processed_obsid = f'{obsid}_p'
+    if tbin < 0:
+        tbin = 2**tbin
+    ebins = np.array(ebins.split(), 'f4')
+
+    # use a direct conversion function of energy and channel number #
+    def conv(en):
+        return int(np.floor((en*1000)/3.65))
+    nbins = len(ebins) - 1
+    chans = np.array([[conv(ebins[ie]),conv(ebins[ie+1])-1] for ie in range(nbins)])
+    enegs = [ [ebins[ie],ebins[ie+1]] for ie in range(nbins) ]
+    np.savez(f'energy_{tbin:03g}.npz', en=enegs, chans=chans)
+
+    outdir = f'{processed_obsid}/{outdir}'
+    os.system(f'mkdir -p {outdir}')
+    cwd = os.getcwd()
+    os.chdir(outdir)
+
+    try:
+
+        # list of event file
+        evtfiles = glob.glob(f'../xis/event_cl/ae{obsid}xi*_cl.evt')
+
+        # make region files if we don't have them
+        if not (os.path.exists('src.reg') and os.path.exists('bgd.reg')):
+            if len(evtfiles) == 0:
+                raise ValueError('No event files found in xis/event_cl')
+            evtfile = evtfiles[0]
+            for evtfile in evtfiles:
+                if os.path.exists(evtfile):
+                    break
+            with fits.open(evtfile) as filep:
+                obj_ra  = filep['events'].header['ra_obj'] # pylint: disable=no-member
+                obj_dec = filep['events'].header['dec_obj'] # pylint: disable=no-member
+
+            # write source and background region files
+            src_reg = ('# Region file format: DS9 version 4.1\nfk5\n'
+                    f'circle({obj_ra},{obj_dec},{src_radius}")\n')
+            bgd_reg = ('# Region file format: DS9 version 4.1\nfk5\n'
+                    f'annulus({obj_ra},{obj_dec},{src_radius*3}",{src_radius*6}")')
+            with open('src.reg', 'w', encoding='utf-8') as fp:
+                fp.write(src_reg)
+            with open('bgd.reg', 'w', encoding='utf-8') as fp:
+                fp.write(bgd_reg)
+
+        spec_dir = None
+        for sdir in ['../spec', '../../spec']:
+            if os.path.exists(sdir):
+                spec_dir = sdir
+                break
+        if spec_dir is None:
+            raise ValueError('no spec dir found; extract the spectra first')
+
+        # get the spectra for the three xis instruments
+        backscale, src_backscale = [], []
+        for instr in ['xi0', 'xi1', 'xi3']:
+            root = f'{prefix}_{instr}'
+
+            sfile = glob.glob(f'{spec_dir}/*{instr}*pha')
+            bfile = glob.glob(f'{spec_dir}/*{instr}*bgd')
+            if len(sfile)==0 or len(bfile)==0:
+                raise ValueError(f'No spectra found for {instr} in {spec_dir}')
+            bscale = []
+            for file in [sfile[0], bfile[0]]:
+                with fits.open(file) as fp:
+                    if 'backscal' in fp[1].header:
+                        bscale.append(fp[1].header['backscal'])
+                    elif 'backscal'.upper() in fp[1].columns.names:
+                        bscale.append(fp[1].data.field('backscal').mean())
+                    else:
+                        raise ValueError(f'Cannot find BACKSCAL in {sfile[0]}')
+            backscale.append(bscale[0]/bscale[1])
+            src_backscale.append(bscale[0])
+
+            evts = '\n'.join([f'read event {os.path.basename(evt)} {os.path.dirname(evt)}\yes'
+                                for evt in evtfiles if instr in evt])
+            xsel_en = ''
+            for ie in range(nbins):
+                ch1, ch2 = chans[ie]
+                xsel_en += 'clear COLUMN\n'
+                xsel_en += f'filter COLUMN "PI={ch1}:{ch2}"\n'
+                xsel_en += f'extract curve bin={tbin} offset=no\n'
+                xsel_en += f'\nsave curve {root}_e{ie+1}.{{0}}\n'
+
+            xsel = (
+                f'tmp_{root}\n'
+                f'{evts}\n'
+                f'filter region src.reg\n'
+                f'{xsel_en.format("src")}\n'
+                f'clear region\nfilter region bgd.reg\n'
+                f'{xsel_en.format("bgd")}\n'
+                'exit\nno'
+            )
+            with subprocess.Popen("xselect", stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,stdin=subprocess.PIPE) as proc:
+                proc.communicate(xsel.encode())
+                proc.wait()
+
+            if proc.returncode == 0:
+                print(f'lightcurve sucessfully extracted for {obsid}:{instr.lower()}!')
+            else:
+                logfile = f'extract_suzaku_lc_{root}_{obsid}.log'
+                print(f'ERROR processing {obsid}; Writing log to {logfile}')
+                with open(logfile, 'w', encoding='utf8') as filep:
+                    filep.write(proc.stdout.decode() + '\n++++ stderr++++\n' + proc.stderr.decode())
+                return proc.returncode
+
+            # background-subtracted lc
+            for ie in range(nbins):
+                hsp.lcmath(infile=f'{root}_e{ie+1}.src', bgfile=f'{root}_e{ie+1}.bgd',
+                    outfile=f'{root}_e{ie+1}.lc', multi=1.0, multb=bscale[0]/bscale[1],
+                    addsubr='no', clobber=True)
+    finally:
+        os.chdir(cwd)
+
+    return 0
+
+# parallel version of extract_suzaku_xis_lc
+extract_suzaku_xis_lcs = parallelize(extract_suzaku_xis_lc, use_irun=True)
