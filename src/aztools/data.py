@@ -1159,7 +1159,7 @@ def extract_nicer_spec(obsid: str, **kwargs):
             with fits.open(f'{outdir}/{prefix}.pha') as filep:
                 filep['spectrum'].header['backfile'] = bgfile
                 filep['spectrum'].header['respfile'] = f'{prefix}.rmf'
-                filep['spectrum'].header['arffile'] = f'{prefix}.arf'
+                filep['spectrum'].header['ancrfile'] = f'{prefix}.arf'
                 filep.writeto(
                     f'{outdir}/{prefix}_{blabel}.pha', overwrite=True)
 
