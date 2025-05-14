@@ -71,7 +71,7 @@ def process_nicer_obsid(obsid: str, **kwargs):
         logfile = f'process_nicer_{obsid}.log'
         print(f'ERROR processing {obsid}; Writing log to {logfile}')
         with open(logfile, 'w', encoding='utf8') as filep:
-            filep.write(out)
+            filep.write(f'{out}')
     return out.returncode
 
 
@@ -129,7 +129,7 @@ def process_nustar_obsid(obsid: str, **kwargs):
         logfile = f'process_nustar_{obsid}.log'
         print(f'ERROR processing {obsid}; Writing log to {logfile}')
         with open(logfile, 'w', encoding='utf8') as filep:
-            filep.write(out)
+            filep.write(f'{out}')
     return out.returncode
 
 
@@ -188,7 +188,7 @@ def process_suzaku_obsid(obsid: str, **kwargs):
         logfile = f'process_suzaku_{obsid}.log'
         print(f'ERROR processing {obsid}; Writing log to {logfile}')
         with open(logfile, 'w', encoding='utf8') as filep:
-            filep.write(out)
+            filep.write(f'{out}')
     return out.returncode
 
 
